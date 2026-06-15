@@ -1,17 +1,17 @@
-
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, Send, Plus, Mic, Sparkles, MoreVertical, Phone, Video, Loader2 } from 'lucide-react';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { aiConversationAssistant } from '@/ai/flows/ai-conversation-assistant-flow';
 import { useAuth } from '@/context/AuthContext';
 import { 
   useFirestore, 
   useDoc, 
-  useCollection 
+  useCollection,
+  useMemoFirebase
 } from '@/firebase';
 import { 
   collection, 
@@ -23,7 +23,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ChatDetailPage() {
   const { id } = useParams();
@@ -37,11 +37,11 @@ export default function ChatDetailPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Load chat metadata
-  const chatRef = useMemo(() => id ? doc(db, 'chats', id as string) : null, [db, id]);
+  const chatRef = useMemoFirebase(() => id ? doc(db, 'chats', id as string) : null, [db, id]);
   const { data: chat, loading: chatLoading } = useDoc(chatRef);
 
-  // Load messages in real-time
-  const messagesQuery = useMemo(() => {
+  // Load messages in real-time from Firestore
+  const messagesQuery = useMemoFirebase(() => {
     if (!db || !id) return null;
     return query(
       collection(db, 'chats', id as string, 'messages'),
@@ -56,7 +56,9 @@ export default function ChatDetailPage() {
   };
 
   useEffect(() => {
-    scrollToBottom();
+    if (messages.length > 0) {
+      scrollToBottom();
+    }
   }, [messages]);
 
   const handleSend = () => {
@@ -73,7 +75,7 @@ export default function ChatDetailPage() {
     const messagesRef = collection(db, 'chats', id as string, 'messages');
     const currentChatRef = doc(db, 'chats', id as string);
     
-    // Send message to sub-collection
+    // Optimistically initiate the write
     addDoc(messagesRef, messageData)
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -130,7 +132,7 @@ export default function ChatDetailPage() {
   if (chatLoading || messagesLoading) return (
     <div className="flex flex-col items-center justify-center h-screen bg-[#0E0C12] text-primary">
       <Loader2 className="animate-spin mb-4" size={32} />
-      <p className="text-xs font-bold uppercase tracking-widest opacity-50">Encrypting Connection...</p>
+      <p className="text-xs font-bold uppercase tracking-widest opacity-50">Syncing Messages...</p>
     </div>
   );
 
@@ -143,12 +145,10 @@ export default function ChatDetailPage() {
     </div>
   );
 
-  // Identify partner name (assuming simple 1:1 for now)
   const partnerName = chat.participantNames?.find((n: string) => n !== user?.displayName) || 'Chat Partner';
 
   return (
     <div className="flex flex-col h-screen bg-[#0E0C12] animate-fade-in relative">
-      {/* Chat Header */}
       <header className="sticky top-0 z-40 bg-card/80 backdrop-blur-xl safe-top px-2 h-16 flex items-center justify-between border-b border-white/5">
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-muted-foreground hover:bg-white/5 rounded-full">
@@ -184,12 +184,11 @@ export default function ChatDetailPage() {
         </div>
       </header>
 
-      {/* Messages List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-32">
-        {messages.length === 0 && (
+        {messages.length === 0 && !messagesLoading && (
           <div className="flex justify-center mb-4">
             <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground bg-white/5 px-3 py-1 rounded-full">
-              Start your conversation
+              No messages yet
             </span>
           </div>
         )}
@@ -226,9 +225,7 @@ export default function ChatDetailPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Floating UI Container (Input + AI) */}
       <div className="absolute bottom-0 left-0 right-0 p-4 safe-bottom bg-gradient-to-t from-[#0E0C12] via-[#0E0C12]/95 to-transparent pt-10">
-        {/* AI Suggestions */}
         {(aiSuggestions.length > 0 || isAiLoading) && (
           <div className="mb-4 animate-slide-up">
             <div className="flex items-center gap-2 mb-2 px-2 text-primary">
@@ -255,7 +252,6 @@ export default function ChatDetailPage() {
           </div>
         )}
 
-        {/* Chat Input */}
         <div className="flex items-center gap-2 bg-card/60 backdrop-blur-2xl rounded-[2.5rem] p-2 border border-white/10 shadow-2xl">
           <Button variant="ghost" size="icon" className="text-muted-foreground shrink-0 rounded-full h-10 w-10 hover:bg-white/5">
             <Plus size={22} />
