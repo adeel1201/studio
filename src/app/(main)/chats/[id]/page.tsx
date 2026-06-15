@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
@@ -40,7 +41,8 @@ export default function ChatDetailPage() {
   const chatRef = useMemoFirebase(() => id ? doc(db, 'chats', id as string) : null, [db, id]);
   const { data: chat, loading: chatLoading } = useDoc(chatRef);
 
-  // Load messages in real-time from Firestore
+  // Load messages in real-time from Firestore. 
+  // onSnapshot handles the "automatic refresh" when new messages are added.
   const messagesQuery = useMemoFirebase(() => {
     if (!db || !id) return null;
     return query(
@@ -51,15 +53,37 @@ export default function ChatDetailPage() {
 
   const { data: messages = [], loading: messagesLoading } = useCollection(messagesQuery);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
   };
 
+  // Auto-scroll when messages arrive
   useEffect(() => {
     if (messages.length > 0) {
       scrollToBottom();
     }
-  }, [messages]);
+  }, [messages.length]);
+
+  // Mark incoming messages as read automatically
+  useEffect(() => {
+    if (messages.length > 0 && user && id && db) {
+      const unreadIncoming = messages.filter(
+        (m) => m.senderId !== user.uid && m.status !== 'read'
+      );
+
+      unreadIncoming.forEach((msg) => {
+        const msgRef = doc(db, 'chats', id as string, 'messages', msg.id);
+        updateDoc(msgRef, { status: 'read' }).catch(async (err) => {
+          const permissionError = new FirestorePermissionError({
+            path: msgRef.path,
+            operation: 'update',
+            requestResourceData: { status: 'read' },
+          });
+          errorEmitter.emit('permission-error', permissionError);
+        });
+      });
+    }
+  }, [messages, user, id, db]);
 
   const handleSend = () => {
     if (!inputText.trim() || !user || !id || !db) return;
@@ -75,7 +99,8 @@ export default function ChatDetailPage() {
     const messagesRef = collection(db, 'chats', id as string, 'messages');
     const currentChatRef = doc(db, 'chats', id as string);
     
-    // Optimistically initiate the write
+    // Optimistically initiate the write.
+    // This will trigger the local onSnapshot listener immediately.
     addDoc(messagesRef, messageData)
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -222,7 +247,7 @@ export default function ChatDetailPage() {
             </div>
           );
         })}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} className="h-4" />
       </div>
 
       <div className="absolute bottom-0 left-0 right-0 p-4 safe-bottom bg-gradient-to-t from-[#0E0C12] via-[#0E0C12]/95 to-transparent pt-10">
