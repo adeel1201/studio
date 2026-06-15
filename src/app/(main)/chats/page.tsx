@@ -1,26 +1,103 @@
+
 "use client";
 
 import { AppHeader } from '@/components/zynqo/AppHeader';
-import { MOCK_CHATS, MOCK_STORIES } from '@/app/lib/zynqo-mock-data';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { Plus, MessageSquare, Search, X } from 'lucide-react';
+import { MessageSquare, Search, X, UserPlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
+import { useAuth } from '@/context/AuthContext';
+import { useFirestore, useCollection } from '@/firebase';
+import { collection, query, where, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger 
+} from '@/components/ui/dialog';
+import { useRouter } from 'next/navigation';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ChatsPage() {
+  const { user } = useAuth();
+  const db = useFirestore();
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false);
 
-  const filteredChats = MOCK_CHATS.filter(chat => 
-    chat.participants[0].displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    chat.lastMessage.text.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Load real chats from Firestore
+  const chatsQuery = useMemo(() => {
+    if (!db || !user) return null;
+    return query(
+      collection(db, 'chats'),
+      where('participantIds', 'array-contains', user.uid),
+      orderBy('updatedAt', 'desc')
+    );
+  }, [db, user]);
+
+  const { data: chats = [], loading: chatsLoading } = useCollection(chatsQuery);
+
+  // Load all users to start new chats (Simplified for MVP)
+  const usersQuery = useMemo(() => {
+    if (!db) return null;
+    return query(collection(db, 'users'), orderBy('displayName', 'asc'));
+  }, [db]);
+
+  const { data: allUsers = [] } = useCollection(usersQuery);
+
+  const filteredChats = chats.filter((chat: any) => {
+    const partnerName = chat.participantNames?.find((n: string) => n !== user?.displayName) || '';
+    const lastMsgText = chat.lastMessage?.text || '';
+    return partnerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           lastMsgText.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  const startNewChat = async (targetUser: any) => {
+    if (!user || !db) return;
+
+    // Check if chat already exists
+    const existingChat = chats.find((c: any) => c.participantIds.includes(targetUser.uid));
+    if (existingChat) {
+      router.push(`/chats/${existingChat.id}`);
+      setIsNewChatOpen(false);
+      return;
+    }
+
+    const newChatData = {
+      participantIds: [user.uid, targetUser.uid],
+      participantNames: [user.displayName, targetUser.displayName],
+      updatedAt: serverTimestamp(),
+      lastMessage: {
+        text: 'Started a new conversation',
+        senderId: user.uid,
+        timestamp: serverTimestamp()
+      }
+    };
+
+    const chatsRef = collection(db, 'chats');
+    addDoc(chatsRef, newChatData)
+      .then((docRef) => {
+        router.push(`/chats/${docRef.id}`);
+        setIsNewChatOpen(false);
+      })
+      .catch(async (error) => {
+        const permissionError = new FirestorePermissionError({
+          path: chatsRef.path,
+          operation: 'create',
+          requestResourceData: newChatData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
 
   return (
-    <div className="flex flex-col animate-fade-in pb-20">
+    <div className="flex flex-col animate-fade-in pb-20 min-h-screen bg-[#0E0C12]">
       <AppHeader 
         title="Zynqo" 
         showSearch={!isSearching}
@@ -59,108 +136,101 @@ export default function ChatsPage() {
         </div>
       )}
 
-      {/* Stories Row (Hidden during search) */}
-      {!isSearching && (
-        <div className="p-4 border-b border-white/5 overflow-x-auto no-scrollbar bg-background/50">
-          <div className="flex gap-4">
-            <div className="flex flex-col items-center gap-1 shrink-0">
-              <div className="relative">
-                <div className="w-16 h-16 rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center p-1 group cursor-pointer hover:border-primary transition-colors">
-                  <Avatar className="w-full h-full">
-                    <AvatarImage src="https://picsum.photos/seed/me/100/100" />
-                    <AvatarFallback>ME</AvatarFallback>
-                  </Avatar>
-                  <div className="absolute bottom-0 right-0 bg-primary text-primary-foreground rounded-full p-0.5 border-2 border-background shadow-lg">
-                    <Plus size={14} />
-                  </div>
-                </div>
-              </div>
-              <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter mt-1">My Story</span>
-            </div>
-            
-            {MOCK_STORIES.map((story) => (
-              <div key={story.id} className="flex flex-col items-center gap-1 shrink-0 group cursor-pointer">
-                <div className={`p-0.5 rounded-full border-2 transition-all duration-300 ${story.hasSeen ? 'border-muted' : 'border-primary shadow-[0_0_10px_rgba(159,95,245,0.3)]'}`}>
-                  <div className="p-0.5 rounded-full bg-background">
-                    <Avatar className="w-14 h-14 group-hover:scale-105 transition-transform">
-                      <AvatarImage src={story.user.avatar} />
-                      <AvatarFallback>{story.user.displayName[0]}</AvatarFallback>
-                    </Avatar>
-                  </div>
-                </div>
-                <span className="text-[10px] text-muted-foreground font-medium truncate w-16 text-center uppercase tracking-tighter mt-1">
-                  {story.user.displayName.split(' ')[0]}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Chat List */}
       <div className="flex flex-col divide-y divide-white/5">
-        {filteredChats.length > 0 ? (
-          filteredChats.map((chat) => (
-            <Link 
-              key={chat.id} 
-              href={`/chats/${chat.id}`}
-              className="flex items-center gap-4 p-4 hover:bg-white/5 transition-all active:bg-white/10 group"
-            >
-              <div className="relative">
-                <div className="p-0.5 rounded-full bg-gradient-to-tr from-primary/20 to-transparent group-hover:from-primary/40 transition-colors">
+        {chatsLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Loader2 className="animate-spin text-primary/50" size={32} />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Syncing Messages...</p>
+          </div>
+        ) : filteredChats.length > 0 ? (
+          filteredChats.map((chat: any) => {
+            const partnerName = chat.participantNames?.find((n: string) => n !== user?.displayName) || 'Partner';
+            const lastMsg = chat.lastMessage?.text || 'No messages yet';
+            const timestamp = chat.updatedAt?.toDate ? chat.updatedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+            return (
+              <Link 
+                key={chat.id} 
+                href={`/chats/${chat.id}`}
+                className="flex items-center gap-4 p-4 hover:bg-white/5 transition-all active:bg-white/10 group"
+              >
+                <div className="relative">
                   <Avatar className="w-14 h-14 border border-white/5 shadow-xl">
-                    <AvatarImage src={chat.participants[0].avatar} />
-                    <AvatarFallback>{chat.participants[0].displayName[0]}</AvatarFallback>
+                    <AvatarImage src={`https://picsum.photos/seed/${chat.id}/100/100`} />
+                    <AvatarFallback>{partnerName[0]}</AvatarFallback>
                   </Avatar>
                 </div>
-                {chat.participants[0].status === 'online' && (
-                  <div className="absolute bottom-0.5 right-0.5 w-4 h-4 bg-green-500 border-2 border-background rounded-full shadow-lg" />
-                )}
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-0.5">
-                  <h3 className="font-bold text-sm text-foreground truncate flex items-center gap-1">
-                    {chat.participants[0].displayName}
-                    {chat.participants[0].verified && <Badge variant="secondary" className="px-1 h-3 text-[8px] bg-primary/20 text-primary border-none">VERIFIED</Badge>}
-                  </h3>
-                  <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-                    {chat.lastMessage.timestamp}
-                  </span>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <h3 className="font-bold text-sm text-foreground truncate flex items-center gap-1">
+                      {partnerName}
+                    </h3>
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                      {timestamp}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground truncate leading-relaxed max-w-[85%]">
+                      {chat.lastMessage?.senderId === user?.uid && <span className="text-primary/70 font-bold mr-1">YOU:</span>}
+                      {lastMsg}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground truncate leading-relaxed max-w-[85%]">
-                    {chat.lastMessage.senderId === 'me' && <span className="text-primary/70 font-bold mr-1">YOU:</span>}
-                    {chat.lastMessage.text}
-                  </p>
-                  {chat.unreadCount > 0 && (
-                    <div className="h-5 min-w-[20px] px-1.5 rounded-full bg-primary text-[10px] font-bold text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/20 animate-pulse">
-                      {chat.unreadCount}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Link>
-          ))
+              </Link>
+            );
+          })
         ) : (
           <div className="flex flex-col items-center justify-center py-32 text-center px-8">
             <div className="w-20 h-20 rounded-3xl bg-white/5 flex items-center justify-center mb-4">
-              <Search size={32} className="text-muted-foreground opacity-20" />
+              <MessageSquare size={32} className="text-muted-foreground opacity-20" />
             </div>
-            <h4 className="font-bold text-lg mb-1">No chats found</h4>
-            <p className="text-xs text-muted-foreground">Try searching for a different name or message content.</p>
+            <h4 className="font-bold text-lg mb-1">{searchQuery ? 'No results found' : 'No conversations yet'}</h4>
+            <p className="text-xs text-muted-foreground">Start a new chat with your friends to see them here.</p>
           </div>
         )}
       </div>
 
-      {/* Floating Action Button */}
+      {/* Floating Action Button with New Chat Dialog */}
       {!isSearching && (
-        <Button 
-          className="fixed bottom-24 right-6 w-14 h-14 rounded-2xl bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/30 z-30 transition-transform active:scale-90"
-          size="icon"
-        >
-          <MessageSquare size={24} />
-        </Button>
+        <Dialog open={isNewChatOpen} onOpenChange={setIsNewChatOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              className="fixed bottom-24 right-6 w-14 h-14 rounded-2xl bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/30 z-30 transition-transform active:scale-90"
+              size="icon"
+            >
+              <UserPlus size={24} />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-card border-white/10 text-foreground rounded-[2rem] max-w-[90vw] sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle className="font-headline text-xl font-bold">New Conversation</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2 py-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground ml-2 mb-2">Available Users</p>
+              {allUsers.filter((u: any) => u.uid !== user?.uid).map((u: any) => (
+                <button 
+                  key={u.uid}
+                  onClick={() => startNewChat(u)}
+                  className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-white/5 transition-colors text-left"
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={u.profilePhoto} />
+                    <AvatarFallback>{u.displayName?.[0]}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h4 className="font-bold text-sm">{u.displayName}</h4>
+                    <p className="text-[10px] text-primary font-medium tracking-widest uppercase">@{u.username}</p>
+                  </div>
+                </button>
+              ))}
+              {allUsers.length <= 1 && (
+                <p className="text-center text-xs text-muted-foreground py-8">No other users found yet.</p>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

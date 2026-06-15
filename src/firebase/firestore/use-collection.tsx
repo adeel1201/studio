@@ -2,10 +2,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Query, onSnapshot, DocumentData, query } from 'firebase/firestore';
+import { Query, onSnapshot, DocumentData } from 'firebase/firestore';
 import { errorEmitter } from '../error-emitter';
 import { FirestorePermissionError } from '../errors';
 
+/**
+ * Custom hook to subscribe to a Firestore collection query.
+ * @param q The Firestore Query object or null.
+ * @returns An object containing the collection data and loading state.
+ */
 export function useCollection<T = DocumentData>(q: Query<T> | null) {
   const [data, setData] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,8 +28,7 @@ export function useCollection<T = DocumentData>(q: Query<T> | null) {
         setData(results);
         setLoading(false);
       },
-      async (error) => {
-        // We use a dummy path representation since Query doesn't have a single path
+      async (serverError) => {
         const permissionError = new FirestorePermissionError({
           path: 'collection_query',
           operation: 'list',
@@ -35,7 +39,7 @@ export function useCollection<T = DocumentData>(q: Query<T> | null) {
     );
 
     return unsubscribe;
-  }, [q ? JSON.stringify(q) : null]);
+  }, [q]); // Removed JSON.stringify as Query objects are complex and can't be stringified easily
 
   return { data, loading };
 }

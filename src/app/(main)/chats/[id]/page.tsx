@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { ChevronLeft, Send, Plus, Mic, Sparkles, MoreVertical, Phone, Video, Loader2 } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { aiConversationAssistant } from '@/ai/flows/ai-conversation-assistant-flow';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/context/AuthContext';
 import { 
   useFirestore, 
@@ -20,15 +19,16 @@ import {
   orderBy, 
   addDoc, 
   serverTimestamp, 
-  doc 
+  doc,
+  updateDoc
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 export default function ChatDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const db = useFirestore();
   
   const [inputText, setInputText] = useState('');
@@ -62,15 +62,18 @@ export default function ChatDetailPage() {
   const handleSend = () => {
     if (!inputText.trim() || !user || !id || !db) return;
     
+    const textToSend = inputText.trim();
     const messageData = {
       senderId: user.uid,
-      text: inputText,
+      text: textToSend,
       timestamp: serverTimestamp(),
       status: 'sent'
     };
 
     const messagesRef = collection(db, 'chats', id as string, 'messages');
+    const currentChatRef = doc(db, 'chats', id as string);
     
+    // Send message to sub-collection
     addDoc(messagesRef, messageData)
       .catch(async (error) => {
         const permissionError = new FirestorePermissionError({
@@ -80,20 +83,37 @@ export default function ChatDetailPage() {
         });
         errorEmitter.emit('permission-error', permissionError);
       });
+
+    // Update parent chat document for the list view
+    updateDoc(currentChatRef, {
+      lastMessage: {
+        text: textToSend,
+        senderId: user.uid,
+        timestamp: serverTimestamp()
+      },
+      updatedAt: serverTimestamp()
+    }).catch(async (error) => {
+      const permissionError = new FirestorePermissionError({
+        path: currentChatRef.path,
+        operation: 'update',
+        requestResourceData: { lastMessage: textToSend },
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
     
     setInputText('');
     setAiSuggestions([]);
   };
 
   const handleAiAssist = async () => {
-    if (messages.length === 0) return;
+    if (messages.length === 0 || !user) return;
     setIsAiLoading(true);
     try {
-      const lastReceived = [...messages].reverse().find(m => m.senderId !== user?.uid);
+      const lastReceived = [...messages].reverse().find(m => m.senderId !== user.uid);
       
       const result = await aiConversationAssistant({
         messageHistory: messages.slice(-5).map(m => ({ 
-          role: m.senderId === user?.uid ? 'sender' as const : 'receiver' as const, 
+          role: m.senderId === user.uid ? 'sender' as const : 'receiver' as const, 
           text: m.text 
         })),
         lastReceivedMessage: lastReceived?.text || "Hello",
@@ -115,14 +135,16 @@ export default function ChatDetailPage() {
   );
 
   if (!chat) return (
-    <div className="flex items-center justify-center h-screen bg-[#0E0C12] text-muted-foreground">
-      Conversation not found or access denied
+    <div className="flex flex-col items-center justify-center h-screen bg-[#0E0C12] text-muted-foreground p-6 text-center">
+      <p className="mb-4">Conversation not found or access denied.</p>
+      <Button onClick={() => router.push('/chats')} variant="outline" className="rounded-2xl border-primary/20 text-primary">
+        Back to Chats
+      </Button>
     </div>
   );
 
-  // For UI purposes, we assume the first participant who isn't us is the one we're chatting with
-  // In a real app, you'd fetch user profiles for participant IDs
-  const partnerName = chat.participantNames?.[0] || 'Chat Partner';
+  // Identify partner name (assuming simple 1:1 for now)
+  const partnerName = chat.participantNames?.find((n: string) => n !== user?.displayName) || 'Chat Partner';
 
   return (
     <div className="flex flex-col h-screen bg-[#0E0C12] animate-fade-in relative">
@@ -164,15 +186,16 @@ export default function ChatDetailPage() {
 
       {/* Messages List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-32">
-        <div className="flex justify-center mb-4">
-          <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground bg-white/5 px-3 py-1 rounded-full">
-            Conversation Started
-          </span>
-        </div>
+        {messages.length === 0 && (
+          <div className="flex justify-center mb-4">
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground bg-white/5 px-3 py-1 rounded-full">
+              Start your conversation
+            </span>
+          </div>
+        )}
         
         {messages.map((msg) => {
           const isMe = msg.senderId === user?.uid;
-          // Format timestamp
           const date = msg.timestamp?.toDate ? msg.timestamp.toDate() : new Date();
           const timeString = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -214,7 +237,7 @@ export default function ChatDetailPage() {
             </div>
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 px-1">
               {isAiLoading ? (
-                [1,2,3].map(i => <Skeleton key={i} className="h-9 w-28 rounded-2xl bg-white/5 shrink-0" />)
+                [1,2,3].map(i => <div key={i} className="h-9 w-28 rounded-2xl bg-white/5 shrink-0 animate-pulse" />)
               ) : (
                 aiSuggestions.map((suggestion, i) => (
                   <Button 
