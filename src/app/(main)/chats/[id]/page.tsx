@@ -17,7 +17,9 @@ import {
   Download,
   Image as ImageIcon,
   PlayCircle,
-  X
+  X,
+  Square,
+  Trash2
 } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
@@ -43,6 +45,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 export default function ChatDetailPage() {
   const { id } = useParams();
@@ -58,6 +61,13 @@ export default function ChatDetailPage() {
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Voice recording states
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load chat metadata
   const chatRef = useMemoFirebase(() => id ? doc(db, 'chats', id as string) : null, [db, id]);
@@ -102,7 +112,7 @@ export default function ChatDetailPage() {
     }
   }, [messages, user, id, db]);
 
-  const handleSend = (mediaData?: { url: string; type: string; name?: string }) => {
+  const handleSend = (mediaData?: { url: string; type: string; name?: string; duration?: number }) => {
     if ((!inputText.trim() && !mediaData) || !user || !id || !db) return;
     
     const textToSend = inputText.trim();
@@ -117,6 +127,7 @@ export default function ChatDetailPage() {
       messageData.mediaUrl = mediaData.url;
       messageData.mediaType = mediaData.type;
       if (mediaData.name) messageData.fileName = mediaData.name;
+      if (mediaData.duration) messageData.duration = mediaData.duration;
     }
 
     const messagesRef = collection(db, 'chats', id as string, 'messages');
@@ -177,6 +188,94 @@ export default function ChatDetailPage() {
         setIsUploading(false);
       }
     );
+  };
+
+  // Voice recording logic
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        await uploadVoiceMessage(audioBlob, recordingDuration);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingDuration(0);
+      timerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      toast({
+        title: "Microphone Access Denied",
+        description: "Please enable microphone access to record voice messages.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      audioChunksRef.current = []; // Clear chunks so onstop doesn't upload
+      setIsRecording(false);
+      if (timerRef.current) clearInterval(timerRef.current);
+      setRecordingDuration(0);
+    }
+  };
+
+  const uploadVoiceMessage = async (blob: Blob, duration: number) => {
+    if (!user || !id || !storage || audioChunksRef.current.length === 0) return;
+
+    setIsUploading(true);
+    const fileName = `voice_${Date.now()}.webm`;
+    const storageRef = ref(storage, `chats/${id}/${fileName}`);
+    const uploadTask = uploadBytesResumable(storageRef, blob);
+
+    uploadTask.on(
+      'state_changed',
+      null,
+      () => {
+        setIsUploading(false);
+        toast({ title: "Voice message failed to send", variant: "destructive" });
+      },
+      async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        handleSend({
+          url: downloadURL,
+          type: 'voice',
+          name: 'Voice Message',
+          duration: duration
+        });
+        setIsUploading(false);
+        setRecordingDuration(0);
+      }
+    );
+  };
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleAiAssist = async () => {
@@ -308,6 +407,24 @@ export default function ChatDetailPage() {
                           className="w-full rounded-t-lg"
                         />
                       </div>
+                    ) : msg.mediaType === 'voice' ? (
+                      <div className="p-4 flex flex-col gap-2 min-w-[220px]">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-10 h-10 rounded-full flex items-center justify-center",
+                            isMe ? "bg-white/20 text-white" : "bg-primary/10 text-primary"
+                          )}>
+                            <PlayCircle size={24} />
+                          </div>
+                          <div className="flex-1">
+                            <div className="h-1 bg-current opacity-20 rounded-full w-full" />
+                          </div>
+                          <span className="text-[10px] font-bold">
+                            {msg.duration ? formatDuration(msg.duration) : 'Voice'}
+                          </span>
+                        </div>
+                        <audio src={msg.mediaUrl} className="hidden" />
+                      </div>
                     ) : (
                       <div className="p-4 flex items-center gap-3 bg-white/5">
                         <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
@@ -380,66 +497,103 @@ export default function ChatDetailPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 bg-card/60 backdrop-blur-2xl rounded-[2.5rem] p-2 border border-white/10 shadow-2xl">
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            className="hidden" 
-            accept="image/*,video/*,.pdf,.doc,.docx"
-          />
-          
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            disabled={isUploading}
-            onClick={() => fileInputRef.current?.click()}
-            className="text-muted-foreground shrink-0 rounded-full h-10 w-10 hover:bg-white/5"
-          >
-            {isUploading ? <Loader2 size={20} className="animate-spin" /> : <Plus size={22} />}
-          </Button>
-          
-          <input 
-            type="text" 
-            placeholder="Type a message..."
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/50 px-2 font-medium"
-          />
-          
-          <div className="flex items-center gap-1">
-            {!inputText.trim() && (
+        <div className={cn(
+          "flex items-center gap-2 bg-card/60 backdrop-blur-2xl rounded-[2.5rem] p-2 border border-white/10 shadow-2xl transition-all duration-300",
+          isRecording && "bg-primary/10 border-primary/30"
+        )}>
+          {isRecording ? (
+            <div className="flex-1 flex items-center justify-between px-4">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-sm font-bold font-mono">{formatDuration(recordingDuration)}</span>
+                <span className="text-xs text-muted-foreground animate-pulse ml-2">Recording Voice...</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={cancelRecording}
+                  className="text-muted-foreground hover:bg-red-500/10 hover:text-red-500 rounded-full h-10 w-10"
+                >
+                  <Trash2 size={20} />
+                </Button>
+                <Button 
+                  onClick={stopRecording}
+                  size="icon" 
+                  className="rounded-full bg-primary hover:bg-primary/90 h-10 w-10 shadow-lg"
+                >
+                  <Send size={18} />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileUpload} 
+                className="hidden" 
+                accept="image/*,video/*,.pdf,.doc,.docx"
+              />
+              
               <Button 
                 variant="ghost" 
                 size="icon" 
-                onClick={handleAiAssist}
-                className="text-primary hover:bg-primary/10 shrink-0 rounded-full h-10 w-10 transition-colors"
-                title="Get AI Suggestions"
+                disabled={isUploading}
+                onClick={() => fileInputRef.current?.click()}
+                className="text-muted-foreground shrink-0 rounded-full h-10 w-10 hover:bg-white/5"
               >
-                <Sparkles size={20} />
+                {isUploading ? <Loader2 size={20} className="animate-spin" /> : <Plus size={22} />}
               </Button>
-            )}
-            
-            {(inputText.trim()) ? (
-              <Button 
-                onClick={() => handleSend()}
-                size="icon" 
-                className="rounded-full bg-primary hover:bg-primary/90 h-10 w-10 shadow-lg shadow-primary/20 active:scale-90 transition-transform"
-              >
-                <Send size={18} />
-              </Button>
-            ) : (
-              <Button variant="ghost" size="icon" className="text-muted-foreground shrink-0 rounded-full h-10 w-10 hover:bg-white/5">
-                <Mic size={22} />
-              </Button>
-            )}
-          </div>
+              
+              <input 
+                type="text" 
+                placeholder="Type a message..."
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground/50 px-2 font-medium"
+              />
+              
+              <div className="flex items-center gap-1">
+                {!inputText.trim() && (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={handleAiAssist}
+                    className="text-primary hover:bg-primary/10 shrink-0 rounded-full h-10 w-10 transition-colors"
+                    title="Get AI Suggestions"
+                  >
+                    <Sparkles size={20} />
+                  </Button>
+                )}
+                
+                {(inputText.trim()) ? (
+                  <Button 
+                    onClick={() => handleSend()}
+                    size="icon" 
+                    className="rounded-full bg-primary hover:bg-primary/90 h-10 w-10 shadow-lg shadow-primary/20 active:scale-90 transition-transform"
+                  >
+                    <Send size={18} />
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={startRecording}
+                    className="text-muted-foreground shrink-0 rounded-full h-10 w-10 hover:bg-white/5 active:scale-125 transition-transform"
+                  >
+                    <Mic size={22} />
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
