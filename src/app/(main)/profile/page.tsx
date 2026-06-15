@@ -16,7 +16,8 @@ import {
   Edit3,
   Globe,
   QrCode,
-  Loader2
+  Loader2,
+  Camera
 } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
@@ -45,14 +46,16 @@ export default function ProfilePage() {
   
   const [editData, setEditData] = useState({
     displayName: '',
-    bio: ''
+    bio: '',
+    profilePhoto: ''
   });
 
   useEffect(() => {
     if (profile) {
       setEditData({
         displayName: profile.displayName || '',
-        bio: profile.bio || ''
+        bio: profile.bio || '',
+        profilePhoto: profile.profilePhoto || ''
       });
     }
   }, [profile]);
@@ -84,7 +87,8 @@ export default function ProfilePage() {
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
         displayName: editData.displayName,
-        bio: editData.bio
+        bio: editData.bio,
+        profilePhoto: editData.profilePhoto
       });
       setIsEditing(false);
       toast({
@@ -122,11 +126,22 @@ export default function ProfilePage() {
                 <Edit3 size={20} />
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card border-white/10 text-foreground rounded-[2rem]">
+            <DialogContent className="bg-card border-white/10 text-foreground rounded-[2rem] max-w-[90vw] sm:max-w-[400px]">
               <DialogHeader>
                 <DialogTitle className="font-headline text-xl font-bold">Edit Profile</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 py-4">
+              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto no-scrollbar px-1">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-widest font-bold opacity-70">Profile Photo URL</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      value={editData.profilePhoto}
+                      onChange={(e) => setEditData(prev => ({ ...prev, profilePhoto: e.target.value }))}
+                      className="bg-white/5 border-white/5 h-12 rounded-xl text-xs"
+                      placeholder="https://example.com/photo.jpg"
+                    />
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <Label className="text-[10px] uppercase tracking-widest font-bold opacity-70">Display Name</Label>
                   <Input 
@@ -149,7 +164,7 @@ export default function ProfilePage() {
                 <Button 
                   onClick={handleSaveProfile} 
                   disabled={editLoading}
-                  className="w-full bg-primary hover:bg-primary/90 rounded-xl h-12 font-bold"
+                  className="w-full bg-primary hover:bg-primary/90 rounded-xl h-12 font-bold shadow-lg shadow-primary/20"
                 >
                   {editLoading ? <Loader2 className="animate-spin" /> : "Save Changes"}
                 </Button>
