@@ -1,3 +1,4 @@
+
 "use client";
 
 import { AppHeader } from '@/components/zynqo/AppHeader';
@@ -20,7 +21,7 @@ import {
 import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -42,11 +43,19 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   
-  // Edit Form State
   const [editData, setEditData] = useState({
-    displayName: profile?.displayName || '',
-    bio: profile?.bio || ''
+    displayName: '',
+    bio: ''
   });
+
+  useEffect(() => {
+    if (profile) {
+      setEditData({
+        displayName: profile.displayName || '',
+        bio: profile.bio || ''
+      });
+    }
+  }, [profile]);
 
   if (loading) {
     return (
@@ -97,7 +106,6 @@ export default function ProfilePage() {
     <div className="flex flex-col animate-fade-in bg-[#0E0C12]">
       <AppHeader title="Profile" showActions={false} showSearch={false} />
       
-      {/* Hero Profile Section */}
       <div className="relative h-64 w-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-end justify-center pb-8 border-b border-white/10">
         <div className="absolute top-4 right-4 flex gap-2">
           <Button variant="ghost" size="icon" className="bg-black/20 backdrop-blur-md rounded-2xl text-white">
@@ -110,7 +118,6 @@ export default function ProfilePage() {
                 variant="ghost" 
                 size="icon" 
                 className="bg-black/20 backdrop-blur-md rounded-2xl text-white"
-                onClick={() => setEditData({ displayName: profile.displayName, bio: profile.bio || '' })}
               >
                 <Edit3 size={20} />
               </Button>
@@ -173,7 +180,6 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Stats row */}
       <div className="grid grid-cols-3 gap-2 p-6 -mt-6 z-10">
         {[
           { label: 'Friends', value: '0' },
@@ -187,7 +193,6 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      {/* Settings Sections */}
       <div className="px-6 pb-6 space-y-6">
         <div className="space-y-2">
           <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Account</h4>
