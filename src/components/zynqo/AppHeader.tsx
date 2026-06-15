@@ -7,9 +7,10 @@ interface AppHeaderProps {
   title: string;
   showSearch?: boolean;
   showActions?: boolean;
+  onSearchClick?: () => void;
 }
 
-export function AppHeader({ title, showSearch = true, showActions = true }: AppHeaderProps) {
+export function AppHeader({ title, showSearch = true, showActions = true, onSearchClick }: AppHeaderProps) {
   return (
     <header className="sticky top-0 z-40 w-full glass-morphism safe-top px-4 h-[72px] flex items-center justify-between">
       <h1 className="text-2xl font-headline font-bold text-foreground bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
@@ -18,7 +19,12 @@ export function AppHeader({ title, showSearch = true, showActions = true }: AppH
       
       <div className="flex items-center gap-1">
         {showSearch && (
-          <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onSearchClick}
+            className="text-muted-foreground hover:text-foreground"
+          >
             <Search size={22} />
           </Button>
         )}
