@@ -7,16 +7,33 @@ import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { firebaseConfig } from './config';
 
 export function initializeFirebase(): {
-  app: FirebaseApp;
-  auth: Auth;
-  db: Firestore;
-  storage: FirebaseStorage;
+  app: FirebaseApp | null;
+  auth: Auth | null;
+  db: Firestore | null;
+  storage: FirebaseStorage | null;
 } {
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-  const storage = getStorage(app);
-  return { app, auth, db, storage };
+  // Only initialize if we have an API key to avoid crash on startup
+  const hasConfig = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "undefined";
+  
+  if (!hasConfig) {
+    console.warn("Firebase configuration is missing or invalid. Please check your .env file.");
+    return { app: null, auth: null, db: null, storage: null };
+  }
+
+  try {
+    const app = getApps().length === 0 
+      ? initializeApp(firebaseConfig) 
+      : getApp();
+      
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+    
+    return { app, auth, db, storage };
+  } catch (error) {
+    console.error("Failed to initialize Firebase:", error);
+    return { app: null, auth: null, db: null, storage: null };
+  }
 }
 
 export * from './provider';

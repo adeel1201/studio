@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -30,11 +29,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Presence logic
   useEffect(() => {
-    if (!user) return;
+    if (!user || !db) return;
 
     const userRef = doc(db, 'users', user.uid);
     
-    // Set status to online when user is authenticated
     updateDoc(userRef, {
       onlineStatus: 'online',
       lastSeen: serverTimestamp()
@@ -47,7 +45,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       errorEmitter.emit('permission-error', permissionError);
     });
 
-    // Handle visibility changes (e.g., user minimizes tab)
     const handleVisibilityChange = () => {
       const status = document.visibilityState === 'visible' ? 'online' : 'away';
       updateDoc(userRef, { 
@@ -58,18 +55,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Attempt to set offline when the component unmounts (app close)
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      updateDoc(userRef, {
-        onlineStatus: 'offline',
-        lastSeen: serverTimestamp()
-      }).catch(() => {});
+      if (db) {
+        updateDoc(userRef, {
+          onlineStatus: 'offline',
+          lastSeen: serverTimestamp()
+        }).catch(() => {});
+      }
     };
-  }, [user]);
+  }, [user, db]);
 
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
+
+    if (!auth || !db) {
+      setLoading(false);
+      return;
+    }
 
     const unsubscribeAuth = onAuthStateChanged(auth, (authUser) => {
       setUser(authUser);
@@ -79,7 +82,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         unsubscribeProfile = undefined;
       }
 
-      if (authUser) {
+      if (authUser && db) {
         const docRef = doc(db, "users", authUser.uid);
         unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {

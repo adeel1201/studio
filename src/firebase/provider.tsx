@@ -7,10 +7,10 @@ import { Firestore } from 'firebase/firestore';
 import { FirebaseStorage } from 'firebase/storage';
 
 interface FirebaseContextType {
-  app: FirebaseApp;
-  auth: Auth;
-  db: Firestore;
-  storage: FirebaseStorage;
+  app: FirebaseApp | null;
+  auth: Auth | null;
+  db: Firestore | null;
+  storage: FirebaseStorage | null;
 }
 
 const FirebaseContext = createContext<FirebaseContextType | null>(null);
@@ -23,10 +23,10 @@ export function FirebaseProvider({
   storage,
 }: {
   children: React.ReactNode;
-  app: FirebaseApp;
-  auth: Auth;
-  db: Firestore;
-  storage: FirebaseStorage;
+  app: FirebaseApp | null;
+  auth: Auth | null;
+  db: Firestore | null;
+  storage: FirebaseStorage | null;
 }) {
   return (
     <FirebaseContext.Provider value={{ app, auth, db, storage }}>
