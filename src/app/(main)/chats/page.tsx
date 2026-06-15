@@ -32,7 +32,7 @@ export default function ChatsPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
 
-  // Load real chats from Firestore
+  // Load real chats from Firestore where current user is a participant
   const chatsQuery = useMemoFirebase(() => {
     if (!db || !user) return null;
     return query(
@@ -44,7 +44,7 @@ export default function ChatsPage() {
 
   const { data: chats = [], loading: chatsLoading } = useCollection(chatsQuery);
 
-  // Load all users to search (MVP: Client-side filtering)
+  // Load all users to search for starting a new chat
   const usersQuery = useMemoFirebase(() => {
     if (!db) return null;
     return query(collection(db, 'users'), orderBy('displayName', 'asc'));
@@ -52,26 +52,30 @@ export default function ChatsPage() {
 
   const { data: allUsers = [] } = useCollection(usersQuery);
 
-  // Filter conversations for the main list
-  const filteredChats = chats.filter((chat: any) => {
-    const partnerName = chat.participantNames?.find((n: string) => n !== user?.displayName) || '';
-    const lastMsgText = chat.lastMessage?.text || '';
-    return partnerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           lastMsgText.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  // Filter conversations for the main list based on search input
+  const filteredChats = useMemo(() => {
+    return chats.filter((chat: any) => {
+      const partnerName = chat.participantNames?.find((n: string) => n !== user?.displayName) || '';
+      const lastMsgText = chat.lastMessage?.text || '';
+      return partnerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+             lastMsgText.toLowerCase().includes(searchQuery.toLowerCase());
+    });
+  }, [chats, searchQuery, user?.displayName]);
 
-  // Filter users for the "New Chat" dialog
-  const filteredUsers = allUsers.filter((u: any) => {
-    if (u.uid === user?.uid) return false;
-    const search = userSearchQuery.toLowerCase();
-    return u.username?.toLowerCase().includes(search) || 
-           u.displayName?.toLowerCase().includes(search);
-  });
+  // Filter users for the "New Chat" dialog search
+  const filteredUsers = useMemo(() => {
+    return allUsers.filter((u: any) => {
+      if (u.uid === user?.uid) return false;
+      const search = userSearchQuery.toLowerCase();
+      return u.username?.toLowerCase().includes(search) || 
+             u.displayName?.toLowerCase().includes(search);
+    });
+  }, [allUsers, userSearchQuery, user?.uid]);
 
   const startNewChat = async (targetUser: any) => {
     if (!user || !db) return;
 
-    // Check if chat already exists (1:1 chat)
+    // Check if a 1:1 chat already exists with this user
     const existingChat = chats.find((c: any) => 
       c.participantIds?.length === 2 && c.participantIds.includes(targetUser.uid)
     );
@@ -108,6 +112,18 @@ export default function ChatsPage() {
         });
         errorEmitter.emit('permission-error', permissionError);
       });
+  };
+
+  const formatTimestamp = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
   return (
@@ -161,7 +177,8 @@ export default function ChatsPage() {
           filteredChats.map((chat: any) => {
             const partnerName = chat.participantNames?.find((n: string) => n !== user?.displayName) || 'Partner';
             const lastMsg = chat.lastMessage?.text || 'No messages yet';
-            const timestamp = chat.updatedAt?.toDate ? chat.updatedAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const timestamp = formatTimestamp(chat.updatedAt);
+            const isUnread = chat.lastMessage?.senderId !== user?.uid && chat.lastMessage?.status !== 'read';
 
             return (
               <Link 
@@ -174,22 +191,30 @@ export default function ChatsPage() {
                     <AvatarImage src={`https://picsum.photos/seed/${chat.id}/100/100`} />
                     <AvatarFallback>{partnerName[0]}</AvatarFallback>
                   </Avatar>
+                  {isUnread && (
+                    <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-primary rounded-full border-2 border-[#0E0C12] animate-pulse" />
+                  )}
                 </div>
                 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
-                    <h3 className="font-bold text-sm text-foreground truncate flex items-center gap-1">
+                    <h3 className={`font-bold text-sm truncate flex items-center gap-1 ${isUnread ? 'text-foreground' : 'text-muted-foreground'}`}>
                       {partnerName}
                     </h3>
-                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest shrink-0">
                       {timestamp}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground truncate leading-relaxed max-w-[85%]">
-                      {chat.lastMessage?.senderId === user?.uid && <span className="text-primary/70 font-bold mr-1">YOU:</span>}
+                    <p className={`text-xs truncate leading-relaxed max-w-[85%] ${isUnread ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
+                      {chat.lastMessage?.senderId === user?.uid && <span className="text-primary/70 font-bold mr-1 text-[10px]">YOU:</span>}
                       {lastMsg}
                     </p>
+                    {isUnread && (
+                      <Badge className="bg-primary text-[10px] h-4 px-1.5 min-w-[1rem] flex items-center justify-center rounded-full">
+                        NEW
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -202,6 +227,15 @@ export default function ChatsPage() {
             </div>
             <h4 className="font-bold text-lg mb-1">{searchQuery ? 'No results found' : 'No conversations yet'}</h4>
             <p className="text-xs text-muted-foreground">Start a new chat with your friends to see them here.</p>
+            {!searchQuery && (
+              <Button 
+                onClick={() => setIsNewChatOpen(true)}
+                variant="outline" 
+                className="mt-6 rounded-2xl border-primary/20 text-primary hover:bg-primary/5"
+              >
+                Start Chatting
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -222,7 +256,7 @@ export default function ChatsPage() {
           </DialogTrigger>
           <DialogContent className="bg-card border-white/10 text-foreground rounded-[2rem] max-w-[90vw] sm:max-w-[400px] p-0 overflow-hidden">
             <DialogHeader className="p-6 pb-0">
-              <DialogTitle className="font-headline text-xl font-bold">New Conversation</DialogTitle>
+              <DialogTitle className="font-headline text-xl font-bold text-center sm:text-left">New Conversation</DialogTitle>
             </DialogHeader>
             
             <div className="px-6 py-4">
@@ -232,7 +266,7 @@ export default function ChatsPage() {
                   placeholder="Search by username..." 
                   value={userSearchQuery}
                   onChange={(e) => setUserSearchQuery(e.target.value)}
-                  className="h-10 pl-10 bg-white/5 border-white/5 rounded-xl text-xs"
+                  className="h-10 pl-10 bg-white/5 border-white/5 rounded-xl text-xs focus-visible:ring-primary"
                 />
               </div>
             </div>
@@ -257,9 +291,9 @@ export default function ChatsPage() {
                         </Avatar>
                         <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-card rounded-full" />
                       </div>
-                      <div className="flex-1">
-                        <h4 className="font-bold text-sm group-hover:text-primary transition-colors">{u.displayName}</h4>
-                        <p className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase">@{u.username}</p>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-sm group-hover:text-primary transition-colors truncate">{u.displayName}</h4>
+                        <p className="text-[10px] text-muted-foreground font-medium tracking-widest uppercase truncate">@{u.username}</p>
                       </div>
                       <div className="w-8 h-8 rounded-full bg-primary/0 group-hover:bg-primary/10 flex items-center justify-center text-primary transition-all">
                         <Sparkles size={14} className="opacity-0 group-hover:opacity-100" />
