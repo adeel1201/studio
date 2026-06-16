@@ -5,7 +5,7 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestore, useStorage } from '@/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,10 +78,17 @@ export default function SetupChannelPage() {
         bio: formData.bio.trim(),
         avatar: avatarUrl,
         followerCount: 0,
+        followingCount: 0,
+        totalLikes: 0,
         isVerified: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
+
+      // Also ensure user doc has followingCount
+      await updateDoc(doc(db, 'users', user.uid), {
+        followingCount: 0
+      }).catch(() => {});
 
       toast({ title: "Channel Created!", description: "Welcome to the Zynqo creator community." });
       router.push(`/v-channels/${user.uid}`);

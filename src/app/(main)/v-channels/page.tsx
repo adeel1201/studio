@@ -54,7 +54,6 @@ export default function VChannelsPage() {
 
     if (feedType === 'following') {
       if (followingIds.length === 0) return null;
-      // Note: Firestore 'in' limit is 30 in modern versions, but we'll slice just in case for MVP
       return query(
         collection(db, 'creatorPosts'),
         where('creatorId', 'in', followingIds.slice(0, 30)),
@@ -63,8 +62,6 @@ export default function VChannelsPage() {
       );
     }
 
-    // For You Feed: Ordered byengagement (likes + timestamp)
-    // For simplicity, we order by likeCount and timestamp
     return query(
       collection(db, 'creatorPosts'),
       orderBy('likeCount', 'desc'),
@@ -88,7 +85,6 @@ export default function VChannelsPage() {
 
   return (
     <div className="flex flex-col h-screen bg-black overflow-hidden relative">
-      {/* Header Tabs */}
       <div className="absolute top-0 left-0 right-0 z-50 safe-top px-4 h-20 flex flex-col justify-center bg-gradient-to-b from-black/80 via-black/40 to-transparent">
         <div className="flex items-center justify-between w-full">
           <div className="flex items-center gap-6">
@@ -124,7 +120,6 @@ export default function VChannelsPage() {
         </div>
       </div>
 
-      {/* Vertical Feed */}
       <div className="flex-1 overflow-y-scroll snap-y snap-mandatory no-scrollbar">
         {posts.length > 0 ? (
           posts.map((post: any, i: number) => (
@@ -184,6 +179,7 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
   const toggleLike = async () => {
     if (!db || !user) return;
     const postRef = doc(db, 'creatorPosts', post.id);
+    const creatorChannelRef = doc(db, 'creatorChannels', post.creatorId);
     const newLiked = !isLiked;
     setIsLiked(newLiked);
     
@@ -191,6 +187,11 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
       likes: newLiked ? arrayUnion(user.uid) : arrayRemove(user.uid),
       likeCount: increment(newLiked ? 1 : -1)
     });
+
+    // Update cumulative likes on channel profile
+    updateDoc(creatorChannelRef, {
+      totalLikes: increment(newLiked ? 1 : -1)
+    }).catch(() => {});
   };
 
   const handleVideoClick = () => {
@@ -240,7 +241,6 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
         </div>
       )}
 
-      {/* Interaction Bar */}
       <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6 z-20">
         <div className="flex flex-col items-center gap-1">
            <div onClick={() => router.push(`/v-channels/${post.creatorId}`)} className="relative mb-4 cursor-pointer">
@@ -260,7 +260,7 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
            <div className={cn("p-2 rounded-full transition-transform active:scale-125", isLiked ? "text-red-500" : "text-white drop-shadow-md")}>
               <Heart size={32} className={isLiked ? "fill-current" : ""} />
            </div>
-           <span className="text-[10px] font-bold text-white drop-shadow-md">{post.likes?.length || 0}</span>
+           <span className="text-[10px] font-bold text-white drop-shadow-md">{post.likeCount || 0}</span>
         </button>
 
         <button onClick={() => setIsCommentsOpen(true)} className="flex flex-col items-center gap-1 group">
@@ -286,7 +286,6 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
         )}
       </div>
 
-      {/* Info Overlay */}
       <div className="absolute bottom-16 left-0 right-16 p-4 z-10 bg-gradient-to-t from-black/90 via-black/40 to-transparent">
         <h4 className="font-bold text-white text-base mb-1 cursor-pointer flex items-center gap-2" onClick={() => router.push(`/v-channels/${post.creatorId}`)}>
           @{post.creatorName}

@@ -14,7 +14,8 @@ import {
   deleteDoc,
   setDoc,
   serverTimestamp,
-  increment
+  increment,
+  limit
 } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -28,8 +29,17 @@ import {
   Trash2,
   Share2,
   Edit3,
-  MoreVertical
+  MoreVertical,
+  Lock,
+  Bookmark
 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle 
+} from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -44,6 +54,7 @@ import {
   AlertDialogTitle, 
   AlertDialogTrigger 
 } from '@/components/ui/alert-dialog';
+import { useState } from 'react';
 
 export default function CreatorChannelProfilePage() {
   const { id } = useParams();
@@ -51,6 +62,8 @@ export default function CreatorChannelProfilePage() {
   const { user } = useAuth();
   const db = useFirestore();
   const { toast } = useToast();
+
+  const [activeStatModal, setActiveStatModal] = useState<'followers' | 'following' | null>(null);
 
   const channelRef = useMemoFirebase(() => (id && typeof id === 'string') ? doc(db, 'creatorChannels', id) : null, [db, id]);
   const { data: channel, loading: channelLoading } = useDoc(channelRef);
@@ -66,7 +79,7 @@ export default function CreatorChannelProfilePage() {
 
   const { data: posts = [], loading: postsLoading } = useCollection(postsQuery);
 
-  // Check if following via user_follows collection
+  // Check if following
   const followRef = useMemoFirebase(() => (user && id) ? doc(db, 'user_follows', `${user.uid}_${id}`) : null, [db, user?.uid, id]);
   const { data: followData, loading: followLoading } = useDoc(followRef);
   const isFollowing = !!followData;
@@ -77,11 +90,13 @@ export default function CreatorChannelProfilePage() {
     if (!db || !user || !id || isMe) return;
     const fRef = doc(db, 'user_follows', `${user.uid}_${id}`);
     const cRef = doc(db, 'creatorChannels', id as string);
+    const uRef = doc(db, 'users', user.uid);
 
     try {
       if (isFollowing) {
         await deleteDoc(fRef);
         await updateDoc(cRef, { followerCount: increment(-1) });
+        await updateDoc(uRef, { followingCount: increment(-1) });
         toast({ title: "Unfollowed" });
       } else {
         await setDoc(fRef, {
@@ -90,6 +105,7 @@ export default function CreatorChannelProfilePage() {
           createdAt: serverTimestamp()
         });
         await updateDoc(cRef, { followerCount: increment(1) });
+        await updateDoc(uRef, { followingCount: increment(1) });
         toast({ title: "Following!" });
       }
     } catch (err) {
@@ -123,126 +139,196 @@ export default function CreatorChannelProfilePage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0E0C12] text-white pb-20 animate-fade-in">
-      <div className="relative h-64 w-full">
-         <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-background z-0" />
-         <header className="relative z-10 safe-top flex items-center justify-between px-2 h-16">
+      {/* TikTok Style Header */}
+      <div className="relative w-full">
+         <header className="sticky top-0 z-50 safe-top flex items-center justify-between px-2 h-16 bg-[#0E0C12]/80 backdrop-blur-xl border-b border-white/5">
             <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white rounded-full">
               <ChevronLeft size={28} />
             </Button>
+            <h1 className="font-bold text-sm truncate max-w-[200px]">{channel.name}</h1>
             <div className="flex gap-1">
               <Button variant="ghost" size="icon" className="text-white rounded-full">
-                <Share2 size={22} />
+                <Share2 size={20} />
               </Button>
-              {isMe && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 rounded-full">
-                      <Trash2 size={22} />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent className="bg-card border-white/10 rounded-[2rem]">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Channel?</AlertDialogTitle>
-                      <AlertDialogDescription>Permanently remove your creator profile. Your posts will remain visible unless deleted manually.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel className="rounded-xl">Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteChannel} className="rounded-xl bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
               <Button variant="ghost" size="icon" className="text-white rounded-full">
-                <MoreVertical size={22} />
+                <MoreVertical size={20} />
               </Button>
             </div>
          </header>
 
-         <div className="absolute -bottom-16 left-0 right-0 px-6 flex flex-col items-center">
+         <div className="px-6 pt-6 flex flex-col items-center">
             <div className="relative">
-               <Avatar className="w-28 h-28 border-4 border-[#0E0C12] shadow-2xl">
+               <Avatar className="w-24 h-24 border-2 border-white/5 shadow-2xl">
                   <AvatarImage src={channel.avatar} />
                   <AvatarFallback className="text-3xl font-bold bg-primary/10 text-primary">{channel.name?.[0]}</AvatarFallback>
                </Avatar>
                {channel.isVerified && (
-                 <div className="absolute bottom-1 right-1 bg-primary text-white rounded-full p-1 border-2 border-[#0E0C12]">
+                 <div className="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1 border-2 border-[#0E0C12]">
                    <ShieldCheck size={14} />
                  </div>
                )}
             </div>
+            
             <div className="mt-4 text-center">
-               <h3 className="text-2xl font-headline font-bold">{channel.name}</h3>
-               <p className="text-xs text-primary font-bold uppercase tracking-widest mt-1">@{channel.username}</p>
+               <h3 className="text-lg font-bold">@{channel.username}</h3>
+               {isMe ? (
+                  <Button 
+                    onClick={() => router.push(`/v-channels/edit/${channel.id}`)}
+                    variant="outline"
+                    className="mt-4 h-10 px-8 rounded-lg bg-white/5 border-white/10 text-xs font-bold hover:bg-white/10"
+                  >
+                    Edit Profile
+                  </Button>
+               ) : (
+                  <Button 
+                    onClick={handleFollow}
+                    className={cn(
+                      "mt-4 h-10 px-12 rounded-lg font-bold transition-all text-xs",
+                      isFollowing ? "bg-white/5 border border-white/10 text-white" : "bg-primary text-white shadow-lg shadow-primary/20"
+                    )}
+                  >
+                    {isFollowing ? 'Following' : 'Follow'}
+                  </Button>
+               )}
             </div>
+
+            {/* TikTok Stats Row */}
+            <div className="mt-6 flex items-center gap-6">
+               <button onClick={() => setActiveStatModal('following')} className="flex items-center gap-1.5 hover:opacity-70 transition-opacity">
+                  <span className="font-black text-sm">{channel.followingCount || 0}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Following</span>
+               </button>
+               <button onClick={() => setActiveStatModal('followers')} className="flex items-center gap-1.5 hover:opacity-70 transition-opacity">
+                  <span className="font-black text-sm">{channel.followerCount || 0}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Followers</span>
+               </button>
+               <div className="flex items-center gap-1.5">
+                  <span className="font-black text-sm">{channel.totalLikes || 0}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Likes</span>
+               </div>
+            </div>
+
+            {channel.bio && (
+              <p className="mt-4 text-xs text-center text-muted-foreground leading-relaxed px-4 max-w-xs">
+                {channel.bio}
+              </p>
+            )}
          </div>
       </div>
 
-      <div className="mt-20 px-6 flex flex-col items-center gap-6">
-         <div className="flex items-center gap-8 text-center">
-            <div className="flex flex-col">
-               <span className="text-lg font-headline font-bold">{posts.length}</span>
-               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Posts</span>
-            </div>
-            <div className="w-px h-8 bg-white/5" />
-            <div className="flex flex-col">
-               <span className="text-lg font-headline font-bold">{channel.followerCount || 0}</span>
-               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Followers</span>
-            </div>
-         </div>
+      {/* Content Tabs */}
+      <Tabs defaultValue="videos" className="w-full mt-8">
+        <TabsList className="w-full h-12 bg-transparent border-y border-white/5 p-0 rounded-none flex">
+          <TabsTrigger value="videos" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
+             <Grid size={18} />
+          </TabsTrigger>
+          <TabsTrigger value="liked" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
+             <Heart size={18} />
+          </TabsTrigger>
+          <TabsTrigger value="private" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
+             <Lock size={18} />
+          </TabsTrigger>
+        </TabsList>
 
-         {isMe ? (
-           <Button 
-             onClick={() => router.push(`/v-channels/edit/${channel.id}`)}
-             className="w-full h-12 rounded-2xl bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10"
-           >
-             <Edit3 size={18} className="mr-2" />
-             Edit Channel Info
-           </Button>
-         ) : (
-           <Button 
-             onClick={handleFollow}
-             className={cn(
-               "w-full h-12 rounded-2xl font-bold transition-all shadow-lg",
-               isFollowing ? "bg-white/5 border border-white/10 text-white" : "bg-primary text-white shadow-primary/20"
-             )}
-           >
-             {isFollowing ? 'Following' : 'Follow Channel'}
-           </Button>
-         )}
-
-         {channel.bio && (
-           <p className="text-sm text-center text-muted-foreground italic leading-relaxed px-4">"{channel.bio}"</p>
-         )}
-      </div>
-
-      <div className="mt-8 flex items-center justify-center border-y border-white/5 bg-card/20">
-         <button className="flex-1 py-4 flex flex-col items-center gap-1 border-b-2 border-primary">
-            <Grid size={20} className="text-primary" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-primary">Grid</span>
-         </button>
-      </div>
-
-      <div className="grid grid-cols-3 gap-0.5 mt-0.5">
-         {posts.map((post: any) => (
-           <div key={post.id} className="relative aspect-[3/4] bg-white/5 overflow-hidden group cursor-pointer">
-              {post.type === 'video' ? (
-                <div className="w-full h-full relative">
-                   <VideoIcon className="absolute top-2 right-2 text-white/60 z-10" size={16} />
-                   <video src={post.mediaUrl} className="w-full h-full object-cover" muted playsInline />
-                </div>
-              ) : post.type === 'image' ? (
-                <Image src={post.mediaUrl} alt="Post" fill className="object-cover" />
-              ) : (
-                <div className="h-full w-full flex items-center justify-center p-4 text-[8px] text-muted-foreground italic">"{post.caption}"</div>
-              )}
-              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-              <div className="absolute bottom-2 left-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all translate-y-2">
-                 <Heart size={10} className="text-white fill-current" />
-                 <span className="text-[8px] font-black text-white">{post.likeCount || post.likes?.length || 0}</span>
+        <TabsContent value="videos" className="mt-0">
+          <div className="grid grid-cols-3 gap-0.5">
+            {posts.map((post: any) => (
+              <div key={post.id} onClick={() => router.push('/v-channels')} className="relative aspect-[3/4] bg-white/5 overflow-hidden cursor-pointer group">
+                  {post.type === 'video' ? (
+                    <video src={post.mediaUrl} className="w-full h-full object-cover" muted playsInline />
+                  ) : post.type === 'image' ? (
+                    <Image src={post.mediaUrl} alt="Post" fill className="object-cover" />
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center p-4 text-[10px] text-muted-foreground italic text-center">"{post.caption}"</div>
+                  )}
+                  <div className="absolute bottom-1.5 left-2 flex items-center gap-1">
+                    <PlayCircle size={10} className="text-white fill-current" />
+                    <span className="text-[10px] font-bold text-white drop-shadow-md">{post.viewCount || 0}</span>
+                  </div>
               </div>
+            ))}
+          </div>
+          {posts.length === 0 && (
+            <div className="py-20 flex flex-col items-center text-muted-foreground opacity-40">
+              <VideoIcon size={40} className="mb-2" />
+              <p className="text-xs font-bold uppercase tracking-widest">No videos yet</p>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="liked">
+           <div className="py-20 flex flex-col items-center text-muted-foreground/40 text-center px-8">
+              <Lock size={40} className="mb-4" />
+              <h4 className="text-sm font-bold text-white mb-1">This user's liked videos are private</h4>
+              <p className="text-xs">Videos liked by @{channel.username} are only visible to them.</p>
            </div>
-         ))}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="private">
+           <div className="py-20 flex flex-col items-center text-muted-foreground/40">
+              <Lock size={40} className="mb-2" />
+              <p className="text-xs font-bold uppercase tracking-widest">Private drafts</p>
+           </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Follower/Following Modals */}
+      <StatListModal 
+        isOpen={!!activeStatModal} 
+        onClose={() => setActiveStatModal(null)} 
+        type={activeStatModal || 'followers'} 
+        targetId={id as string} 
+      />
     </div>
   );
 }
+
+function StatListModal({ isOpen, onClose, type, targetId }: { isOpen: boolean; onClose: () => void; type: 'followers' | 'following'; targetId: string }) {
+  const db = useFirestore();
+  const q = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(
+      collection(db, 'user_follows'),
+      where(type === 'followers' ? 'followingId' : 'followerId', '==', targetId),
+      limit(50)
+    );
+  }, [db, type, targetId]);
+
+  const { data: follows = [], loading } = useCollection(q);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="bg-[#0E0C12] border-white/5 text-white sm:max-w-[400px] h-[60vh] flex flex-col p-0 overflow-hidden rounded-t-[2rem] sm:rounded-[2rem]">
+        <DialogHeader className="p-4 border-b border-white/5">
+           <DialogTitle className="text-center font-bold text-sm capitalize">{type}</DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+           {loading ? (
+             <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>
+           ) : follows.length > 0 ? (
+             follows.map((f: any) => (
+               <div key={f.id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                     <Avatar className="w-10 h-10 border border-white/5">
+                        <AvatarFallback>{type === 'followers' ? 'U' : 'C'}</AvatarFallback>
+                     </Avatar>
+                     <div>
+                        <p className="text-xs font-bold">User {f.id.slice(0, 5)}</p>
+                        <p className="text-[10px] text-muted-foreground">Joined Zynqo</p>
+                     </div>
+                  </div>
+                  <Button variant="outline" size="sm" className="h-8 rounded-lg text-[10px] font-bold border-white/10">View</Button>
+               </div>
+             ))
+           ) : (
+             <div className="h-full flex flex-col items-center justify-center text-muted-foreground opacity-40">
+                <p className="text-xs">No {type} found</p>
+             </div>
+           )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+import { PlayCircle } from 'lucide-react';
