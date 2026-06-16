@@ -3,15 +3,13 @@
 
 import Link from 'next/navigation';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, CircleDot, PlayCircle, LayoutGrid, Compass, User, MapPin } from 'lucide-react';
+import { MessageSquare, CircleDot, PlayCircle, Compass, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { icon: MessageSquare, label: 'Chats', path: '/chats' },
   { icon: CircleDot, label: 'Status', path: '/status' },
   { icon: PlayCircle, label: 'Channels', path: '/v-channels' },
-  { icon: MapPin, label: 'Nearby', path: '/nearby' },
-  { icon: LayoutGrid, label: 'Moments', path: '/moments' },
   { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: User, label: 'Profile', path: '/profile' },
 ];

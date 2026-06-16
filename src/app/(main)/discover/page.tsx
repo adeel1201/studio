@@ -1,364 +1,350 @@
+
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { AppHeader } from '@/components/zynqo/AppHeader';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   MapPin, 
   Users, 
-  Compass, 
-  Zap, 
   Search, 
   Radio, 
   Heart, 
   Sparkles, 
   Loader2, 
-  TrendingUp,
   MessageSquare,
   Navigation,
   ChevronRight,
-  LayoutGrid
+  Plus,
+  LocateFixed,
+  Ghost,
+  Shield,
+  Badge,
+  PlayCircle,
+  Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, limit, orderBy } from 'firebase/firestore';
+import { collection, query, where, limit, orderBy, doc, updateDoc, arrayUnion, arrayRemove, serverTimestamp } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
+import { CommentsDialog } from '@/components/zynqo/CommentsDialog';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
-// Haversine formula for distance calculation in kilometers
+// Distance calculation
 function getDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Radius of the earth in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
+
+const INITIAL_MOMENTS_LIMIT = 5;
+const MOMENTS_INCREMENT = 5;
 
 export default function DiscoverPage() {
   const { user, profile } = useAuth();
   const db = useFirestore();
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Fetch Public Channels
-  const channelsQuery = useMemoFirebase(() => {
-    if (!db) return null;
-    return query(collection(db, 'channels'), where('type', '==', 'public'), limit(10));
-  }, [db]);
-  const { data: channels = [], loading: channelsLoading } = useCollection(channelsQuery);
+  // --- Shared State ---
+  const [activeTab, setActiveTab] = useState('moments');
 
-  // Fetch Newest Moments
+  // --- Moments Logic ---
+  const [momentsLimit, setMomentsLimit] = useState(INITIAL_MOMENTS_LIMIT);
+  const [selectedMomentId, setSelectedMomentId] = useState<string | null>(null);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const momentsObserver = useRef<IntersectionObserver | null>(null);
+
   const momentsQuery = useMemoFirebase(() => {
     if (!db) return null;
-    return query(collection(db, 'moments'), orderBy('createdAt', 'desc'), limit(10));
-  }, [db]);
-  const { data: moments = [], loading: momentsLoading } = useCollection(momentsQuery);
+    return query(collection(db, 'moments'), orderBy('createdAt', 'desc'), limit(momentsLimit));
+  }, [db, momentsLimit]);
 
-  // Fetch Global Users for Suggestions & Nearby
+  const { data: moments = [], loading: momentsLoading } = useCollection(momentsQuery);
+  const hasMoreMoments = moments.length === momentsLimit;
+
+  const lastMomentRef = useCallback((node: HTMLDivElement | null) => {
+    if (momentsLoading) return;
+    if (momentsObserver.current) momentsObserver.current.disconnect();
+    momentsObserver.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMoreMoments) {
+        setMomentsLimit(prev => prev + MOMENTS_INCREMENT);
+      }
+    });
+    if (node) momentsObserver.current.observe(node);
+  }, [momentsLoading, hasMoreMoments]);
+
+  const handleToggleLike = (momentId: string, currentLikes: string[] = []) => {
+    if (!db || !user) return;
+    const momentRef = doc(db, 'moments', momentId);
+    const isLiked = currentLikes.includes(user.uid);
+    updateDoc(momentRef, {
+      likes: isLiked ? arrayRemove(user.uid) : arrayUnion(user.uid)
+    }).catch(async () => {
+      const permissionError = new FirestorePermissionError({
+        path: momentRef.path,
+        operation: 'update',
+        requestResourceData: { likes: isLiked ? 'arrayRemove' : 'arrayUnion' }
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
+  };
+
+  // --- Nearby Logic ---
+  const [nearbyLocation, setNearbyLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+
   const usersQuery = useMemoFirebase(() => {
     if (!db) return null;
-    return query(collection(db, 'users'), where('hideLocation', '==', false), limit(20));
+    return query(collection(db, 'users'), where('hideLocation', '==', false));
   }, [db]);
   const { data: allUsers = [], loading: usersLoading } = useCollection(usersQuery);
 
-  // Get user location for nearby logic
-  useEffect(() => {
-    if (!profile?.hideLocation && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => console.log("Location access denied")
-      );
+  const channelsQuery = useMemoFirebase(() => {
+    if (!db) return null;
+    return query(collection(db, 'channels'), where('type', '==', 'public'));
+  }, [db]);
+  const { data: channels = [], loading: channelsLoading } = useCollection(channelsQuery);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setNearbyError("Geolocation not supported");
+      return;
     }
-  }, [profile?.hideLocation]);
+    setIsUpdatingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setNearbyLocation({ lat: latitude, lng: longitude });
+        setNearbyError(null);
+        if (user && db && !profile?.hideLocation) {
+          updateDoc(doc(db, 'users', user.uid), {
+            latitude, longitude, lastLocationUpdate: serverTimestamp()
+          }).catch(() => {});
+        }
+        setIsUpdatingLocation(false);
+      },
+      () => {
+        setNearbyError("Location access denied");
+        setIsUpdatingLocation(false);
+      }
+    );
+  };
+
+  useEffect(() => {
+    if (activeTab === 'nearby' && !profile?.hideLocation && !nearbyLocation) {
+      requestLocation();
+    }
+  }, [activeTab, profile?.hideLocation]);
 
   const nearbyUsers = useMemo(() => {
-    if (!location) return [];
+    if (!nearbyLocation) return [];
     return allUsers
       .filter((u: any) => u.uid !== user?.uid && u.latitude && u.longitude)
       .map((u: any) => ({
         ...u,
-        distance: getDistance(location.lat, location.lng, u.latitude, u.longitude)
+        distance: getDistance(nearbyLocation.lat, nearbyLocation.lng, u.latitude, u.longitude)
       }))
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, 5);
-  }, [allUsers, location, user?.uid]);
+      .sort((a, b) => a.distance - b.distance);
+  }, [allUsers, nearbyLocation, user?.uid]);
 
-  const trendingChannels = useMemo(() => {
-    return [...channels].sort((a: any, b: any) => (b.followerIds?.length || 0) - (a.followerIds?.length || 0)).slice(0, 5);
-  }, [channels]);
-
-  const trendingMoments = useMemo(() => {
-    return [...moments].sort((a: any, b: any) => (b.likes?.length || 0) - (a.likes?.length || 0)).slice(0, 4);
-  }, [moments]);
-
-  const suggestedUsers = useMemo(() => {
-    return allUsers.filter((u: any) => u.uid !== user?.uid).slice(0, 5);
-  }, [allUsers, user?.uid]);
-
-  const isLoading = channelsLoading || momentsLoading || usersLoading;
+  const nearbyChannels = useMemo(() => {
+    if (!nearbyLocation) return [];
+    return channels
+      .filter((c: any) => c.latitude && c.longitude)
+      .map((c: any) => ({
+        ...c,
+        distance: getDistance(nearbyLocation.lat, nearbyLocation.lng, c.latitude, c.longitude)
+      }))
+      .sort((a, b) => a.distance - b.distance);
+  }, [channels, nearbyLocation]);
 
   return (
-    <div className="flex flex-col animate-fade-in bg-[#0E0C12] min-h-screen pb-32">
+    <div className="flex flex-col animate-fade-in bg-[#0E0C12] min-h-screen pb-20">
       <AppHeader title="Discover" showSearch={false} />
       
-      <div className="p-4 space-y-8">
-        {/* Radar & Search Header */}
-        <div className="relative group">
-          <div className="absolute inset-0 bg-primary/5 blur-3xl rounded-full group-hover:bg-primary/10 transition-all" />
-          <div className="relative bg-card/40 backdrop-blur-xl p-6 rounded-[2.5rem] border border-white/5 flex flex-col items-center text-center gap-6">
-            <div className="relative">
-              <div className="absolute inset-0 bg-primary/20 animate-ping rounded-full" />
-              <div className="relative w-16 h-16 rounded-3xl bg-primary/20 flex items-center justify-center text-primary shadow-[0_0_30px_rgba(159,95,245,0.3)]">
-                <Navigation size={32} className="animate-spin-slow" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <h2 className="text-xl font-headline font-bold">Zynqo Radar</h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Scanning for social energy nearby</p>
-            </div>
-            
-            <div className="w-full relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input 
-                placeholder="Search universe..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-12 pl-12 bg-white/5 border-white/5 rounded-2xl focus-visible:ring-primary text-sm shadow-inner"
-              />
-            </div>
-          </div>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="sticky top-[72px] z-40 bg-[#0E0C12]/80 backdrop-blur-xl border-b border-white/5">
+          <TabsList className="w-full h-14 bg-transparent p-0 flex justify-center gap-8">
+            <TabsTrigger 
+              value="moments" 
+              className="bg-transparent border-none text-muted-foreground data-[state=active]:text-primary data-[state=active]:bg-transparent font-bold uppercase tracking-widest text-[10px] relative transition-all"
+            >
+              Moments
+              {activeTab === 'moments' && <div className="absolute -bottom-1 left-0 right-0 h-1 bg-primary rounded-full shadow-[0_0_10px_rgba(159,95,245,0.5)]" />}
+            </TabsTrigger>
+            <TabsTrigger 
+              value="nearby" 
+              className="bg-transparent border-none text-muted-foreground data-[state=active]:text-primary data-[state=active]:bg-transparent font-bold uppercase tracking-widest text-[10px] relative transition-all"
+            >
+              Nearby
+              {activeTab === 'nearby' && <div className="absolute -bottom-1 left-0 right-0 h-1 bg-primary rounded-full shadow-[0_0_10px_rgba(159,95,245,0.5)]" />}
+            </TabsTrigger>
+          </TabsList>
         </div>
 
-        {/* Nearby Pulse (New) */}
-        {nearbyUsers.length > 0 && (
-          <section className="space-y-4">
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-2">
-                <MapPin size={16} className="text-secondary" />
-                <h3 className="font-headline font-bold text-lg">Near You</h3>
-              </div>
-              <Button variant="link" onClick={() => router.push('/nearby')} className="text-primary text-[10px] font-bold uppercase tracking-widest p-0 h-auto">Radar</Button>
-            </div>
-
-            <div className="flex gap-4 overflow-x-auto no-scrollbar px-2 pb-2">
-              {nearbyUsers.map((u: any) => (
-                <div 
-                  key={u.uid}
-                  onClick={() => router.push(`/users/${u.uid}`)}
-                  className="min-w-[140px] bg-card/30 border border-white/5 p-4 rounded-[2rem] flex flex-col items-center text-center gap-3 hover:bg-white/5 transition-all cursor-pointer group"
-                >
-                  <div className="relative">
-                    <Avatar className="w-16 h-16 rounded-2xl border-2 border-secondary/20 p-1">
-                      <AvatarImage src={u.profilePhoto} />
-                      <AvatarFallback>{u.displayName?.[0]}</AvatarFallback>
-                    </Avatar>
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-[#0E0C12] rounded-full" />
-                  </div>
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-xs truncate">{u.displayName}</h4>
-                    <span className="text-[8px] font-black text-secondary uppercase tracking-tighter">
-                      {u.distance < 1 ? `${Math.round(u.distance * 1000)}m` : `${u.distance.toFixed(1)}km`}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Trending Channels */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-2">
-              <TrendingUp size={16} className="text-primary" />
-              <h3 className="font-headline font-bold text-lg">Trending Channels</h3>
-            </div>
-            <Button variant="link" onClick={() => router.push('/channels')} className="text-primary text-[10px] font-bold uppercase tracking-widest p-0 h-auto">View All</Button>
-          </div>
-
-          <div className="flex gap-4 overflow-x-auto no-scrollbar px-2 pb-2">
-            {isLoading ? (
-              [1, 2, 3].map(i => <div key={i} className="min-w-[220px] h-32 rounded-3xl bg-white/5 animate-pulse" />)
-            ) : trendingChannels.length > 0 ? (
-              trendingChannels.map((channel: any) => (
-                <div 
-                  key={channel.id}
-                  onClick={() => router.push(`/channels/${channel.id}`)}
-                  className="min-w-[240px] bg-card/60 border border-white/5 p-4 rounded-3xl flex flex-col gap-3 hover:bg-white/5 transition-all cursor-pointer group shadow-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12 rounded-2xl border border-primary/20 bg-primary/5">
-                      <AvatarImage src={channel.photo} />
-                      <AvatarFallback><Radio size={20} /></AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <h4 className="font-bold text-sm truncate group-hover:text-primary transition-colors">{channel.name}</h4>
-                      <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-bold uppercase">
-                        <Users size={10} />
-                        <span>{channel.followerIds?.length || 0} Followers</span>
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground line-clamp-2 leading-relaxed opacity-80">{channel.description || 'Join our broadcast channel'}</p>
-                </div>
-              ))
-            ) : (
-              <div className="w-full py-8 text-center text-xs text-muted-foreground">No channels found yet.</div>
-            )}
-          </div>
-        </section>
-
-        {/* Suggested People */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-2">
-              <Sparkles size={16} className="text-yellow-500" />
-              <h3 className="font-headline font-bold text-lg">People to Follow</h3>
-            </div>
-          </div>
-          
-          <div className="flex flex-col gap-3">
-            {isLoading ? (
-              [1, 2, 3].map(i => <div key={i} className="w-full h-16 rounded-2xl bg-white/5 animate-pulse" />)
-            ) : suggestedUsers.map((u: any) => (
-              <div key={u.uid} className="flex items-center justify-between bg-card/30 p-3 rounded-2xl border border-white/5 shadow-sm group hover:bg-white/5 transition-all">
-                <div 
-                  className="flex items-center gap-3 cursor-pointer" 
-                  onClick={() => router.push(`/users/${u.uid}`)}
-                >
-                  <Avatar className="h-12 w-12 rounded-xl border border-white/10 group-hover:border-primary/20 transition-all">
-                    <AvatarImage src={u.profilePhoto} />
-                    <AvatarFallback>{u.displayName?.[0]}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h4 className="font-bold text-sm group-hover:text-primary transition-colors">{u.displayName}</h4>
-                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-bold uppercase tracking-widest">
-                      <AtSign size={8} className="opacity-50" />
-                      <span>{u.username}</span>
-                    </div>
-                  </div>
-                </div>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={() => router.push(`/users/${u.uid}`)}
-                  className="rounded-xl border-primary/40 text-primary hover:bg-primary hover:text-white h-8 px-4 text-[10px] font-black uppercase tracking-widest transition-all"
-                >
-                  Visit
-                </Button>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Trending Moments (Moments Style Feed Integration) */}
-        <section className="space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-2">
-              <Zap size={16} className="text-secondary" />
-              <h3 className="font-headline font-bold text-lg">Moment Pulse</h3>
-            </div>
-            <Button variant="link" onClick={() => router.push('/moments')} className="text-primary text-[10px] font-bold uppercase tracking-widest p-0 h-auto">Full Feed</Button>
-          </div>
-
-          <div className="flex flex-col gap-6">
-            {isLoading ? (
-              [1, 2].map(i => <div key={i} className="aspect-video rounded-[2.5rem] bg-white/5 animate-pulse" />)
-            ) : trendingMoments.map((moment: any) => (
+        <TabsContent value="moments" className="m-0 p-4 space-y-4">
+          {moments.map((moment: any, idx) => {
+            const isLast = idx === moments.length - 1;
+            const isLiked = moment.likes?.includes(user?.uid);
+            return (
               <div 
-                key={moment.id}
-                onClick={() => router.push('/moments')}
-                className="bg-card/40 rounded-[2.5rem] overflow-hidden border border-white/5 shadow-2xl group cursor-pointer hover:border-primary/20 transition-all"
+                key={moment.id} 
+                ref={isLast ? lastMomentRef : null}
+                className="bg-card rounded-[2rem] overflow-hidden border border-white/5 shadow-xl animate-fade-in"
               >
-                {/* Moment Header */}
-                <div className="p-4 flex items-center gap-3">
-                  <Avatar className="w-8 h-8 rounded-lg border border-white/10">
+                <div className="p-5 flex items-center gap-3">
+                  <Avatar className="w-10 h-10 border border-primary/20">
                     <AvatarImage src={moment.userPhoto} />
                     <AvatarFallback>{moment.userName?.[0]}</AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <h5 className="text-[11px] font-bold truncate">{moment.userName}</h5>
-                    <p className="text-[8px] text-muted-foreground font-black uppercase tracking-tighter">
-                      {moment.createdAt?.toDate ? formatDistanceToNow(moment.createdAt.toDate(), { addSuffix: true }) : 'Recently'}
-                    </p>
+                  <div>
+                    <h4 className="font-bold text-sm leading-none">{moment.userName}</h4>
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-1 block">
+                      {moment.createdAt?.toDate ? formatDistanceToNow(moment.createdAt.toDate(), { addSuffix: true }) : 'Just now'}
+                    </span>
                   </div>
-                  <Heart size={14} className="text-primary/40 group-hover:text-red-500 transition-colors" />
                 </div>
-
-                {/* Moment Media */}
-                <div className="relative aspect-video bg-black/20">
-                  {moment.imageUrl ? (
-                    <Image 
-                      src={moment.imageUrl} 
-                      alt="Moment" 
-                      fill 
-                      className="object-cover transition-transform group-hover:scale-105 duration-700"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center p-8 text-center italic text-xs text-muted-foreground/60">
-                      "{moment.content}"
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  {/* Content Overlay */}
-                  {moment.content && moment.imageUrl && (
-                    <div className="absolute bottom-4 left-4 right-4 translate-y-2 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all">
-                      <p className="text-[10px] text-white/90 line-clamp-2 leading-relaxed bg-black/40 backdrop-blur-md p-3 rounded-2xl border border-white/10">
-                        {moment.content}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Stats Footer */}
-                <div className="px-6 py-3 flex items-center justify-between opacity-60 group-hover:opacity-100 transition-opacity border-t border-white/5">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1">
-                      <Heart size={12} className="text-red-500 fill-current" />
-                      <span className="text-[9px] font-black">{moment.likes?.length || 0}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <MessageSquare size={12} className="text-primary" />
-                      <span className="text-[9px] font-black">Join Discuss</span>
-                    </div>
+                {moment.content && <div className="px-5 pb-4"><p className="text-sm leading-relaxed opacity-90">{moment.content}</p></div>}
+                {moment.imageUrl && (
+                  <div className="relative aspect-[4/3] w-full bg-muted/20">
+                    <Image src={moment.imageUrl} alt="Moment" fill className="object-cover" />
                   </div>
-                  <LayoutGrid size={12} className="text-muted-foreground" />
+                )}
+                {moment.videoUrl && (
+                  <div className="relative aspect-video w-full bg-black/40">
+                    <video src={moment.videoUrl} className="w-full h-full object-contain" controls />
+                  </div>
+                )}
+                <div className="px-5 py-4 border-t border-white/5 flex items-center gap-6">
+                  <button onClick={() => handleToggleLike(moment.id, moment.likes)} className={cn("flex items-center gap-2 group transition-colors", isLiked ? "text-red-500" : "text-muted-foreground")}>
+                    <Heart size={20} className={cn(isLiked && "fill-current")} />
+                    <span className="text-xs font-bold">{moment.likes?.length || 0}</span>
+                  </button>
+                  <button onClick={() => { setSelectedMomentId(moment.id); setIsCommentsOpen(true); }} className="flex items-center gap-2 text-muted-foreground">
+                    <MessageSquare size={20} />
+                    <span className="text-xs font-bold">Comments</span>
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  );
-}
+            );
+          })}
+          {momentsLoading && <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-primary" size={24} /></div>}
+          {!hasMoreMoments && moments.length > 0 && <p className="text-center text-[10px] text-muted-foreground uppercase font-black opacity-30 py-4">No more moments</p>}
+          <Button onClick={() => router.push('/moments/create')} className="fixed bottom-24 right-6 w-14 h-14 rounded-2xl bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/30 z-50 transition-transform active:scale-90" size="icon">
+            <Plus size={24} />
+          </Button>
+        </TabsContent>
 
-function AtSign(props: any) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="4" />
-      <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
-    </svg>
+        <TabsContent value="nearby" className="m-0 p-4">
+          {profile?.hideLocation ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center gap-6">
+              <div className="w-20 h-20 rounded-[2rem] bg-primary/10 flex items-center justify-center text-primary shadow-lg shadow-primary/5">
+                <Ghost size={40} />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-lg font-bold">Ghost Mode Active</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed px-8">Enable location sharing in your profile settings to see people nearby.</p>
+              </div>
+              <Button onClick={() => router.push('/profile/edit')} className="rounded-2xl bg-primary">Settings</Button>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              <div className="bg-card/40 backdrop-blur-2xl p-6 rounded-[2.5rem] border border-white/5 flex flex-col items-center text-center gap-6 relative overflow-hidden">
+                <div className="absolute inset-0 bg-primary/5 blur-3xl rounded-full" />
+                <div className="relative">
+                  <div className="absolute inset-0 bg-primary/20 animate-ping rounded-full" />
+                  <div className="relative w-16 h-16 rounded-3xl bg-primary/20 flex items-center justify-center text-primary">
+                    <Navigation size={32} className="animate-spin-slow" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <h2 className="text-xl font-headline font-bold">Discovery Radar</h2>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-black opacity-60">Scanning for social energy nearby</p>
+                </div>
+                {nearbyError ? (
+                  <Badge variant="destructive" className="bg-destructive/10 text-destructive border-none px-4 py-1">
+                    <Shield size={12} className="mr-2" /> {nearbyError}
+                  </Badge>
+                ) : nearbyLocation ? (
+                  <div className="flex items-center gap-2 bg-white/5 px-4 py-2 rounded-full border border-white/5">
+                    <LocateFixed size={14} className="text-primary" />
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Signal Locked</span>
+                  </div>
+                ) : (
+                  <Loader2 className="animate-spin text-primary" size={24} />
+                )}
+              </div>
+
+              <section className="space-y-4">
+                <h3 className="font-headline font-bold text-lg px-2 flex items-center gap-2"><Users size={16} className="text-primary" /> People Nearby</h3>
+                <div className="flex flex-col gap-3">
+                  {nearbyUsers.map((u: any) => (
+                    <div key={u.uid} onClick={() => router.push(`/users/${u.uid}`)} className="flex items-center justify-between bg-card/40 p-4 rounded-3xl border border-white/5 hover:bg-white/10 transition-all cursor-pointer group">
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-14 w-14 rounded-2xl border border-primary/20">
+                          <AvatarImage src={u.profilePhoto} />
+                          <AvatarFallback>{u.displayName?.[0]}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <h4 className="font-bold text-sm">{u.displayName}</h4>
+                          <span className="text-[10px] text-primary font-bold uppercase tracking-wider mt-1 block">
+                            {u.distance < 1 ? `${Math.round(u.distance * 1000)}m away` : `${u.distance.toFixed(1)}km away`}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-muted-foreground/30 group-hover:text-primary transition-colors" />
+                    </div>
+                  ))}
+                  {nearbyUsers.length === 0 && !usersLoading && <p className="text-center py-10 text-xs text-muted-foreground italic">No users found within range.</p>}
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h3 className="font-headline font-bold text-lg px-2 flex items-center gap-2"><Radio size={16} className="text-secondary" /> Local Channels</h3>
+                <div className="flex flex-col gap-3">
+                  {nearbyChannels.map((c: any) => (
+                    <div key={c.id} onClick={() => router.push(`/channels/${c.id}`)} className="flex items-center justify-between bg-secondary/5 p-4 rounded-3xl border border-secondary/10 hover:bg-secondary/10 transition-all cursor-pointer group">
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-14 w-14 rounded-2xl border border-secondary/20 bg-secondary/10">
+                          <AvatarImage src={c.photo} />
+                          <AvatarFallback><Radio size={20} /></AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <h4 className="font-bold text-sm">{c.name}</h4>
+                          <span className="text-[10px] text-secondary font-bold uppercase tracking-wider mt-1 block">
+                            {c.distance < 1 ? `${Math.round(c.distance * 1000)}m away` : `${c.distance.toFixed(1)}km away`}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight size={16} className="text-secondary/30 group-hover:text-secondary transition-colors" />
+                    </div>
+                  ))}
+                  {nearbyChannels.length === 0 && !channelsLoading && <p className="text-center py-10 text-xs text-muted-foreground italic">No local channels found.</p>}
+                </div>
+              </section>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {selectedMomentId && (
+        <CommentsDialog 
+          momentId={selectedMomentId} 
+          isOpen={isCommentsOpen} 
+          onOpenChange={setIsCommentsOpen} 
+        />
+      )}
+    </div>
   );
 }
