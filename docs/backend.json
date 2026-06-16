@@ -25,6 +25,13 @@
           "type": "string",
           "description": "Optional URL to an image stored in Firebase Storage."
         },
+        "likes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of user UIDs who liked this moment."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",

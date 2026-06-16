@@ -2,16 +2,20 @@
 
 import { AppHeader } from '@/components/zynqo/AppHeader';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Plus, Loader2, MessageSquare } from 'lucide-react';
+import { Plus, Loader2, MessageSquare, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Image from 'next/image';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, useAuth } from '@/firebase';
+import { collection, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function MomentsPage() {
   const db = useFirestore();
+  const { user } = useAuth();
   const router = useRouter();
 
   const momentsQuery = useMemoFirebase(() => {
@@ -20,6 +24,24 @@ export default function MomentsPage() {
   }, [db]);
 
   const { data: moments = [], loading } = useCollection(momentsQuery);
+
+  const handleToggleLike = (momentId: string, currentLikes: string[] = []) => {
+    if (!db || !user) return;
+
+    const momentRef = doc(db, 'moments', momentId);
+    const isLiked = currentLikes.includes(user.uid);
+
+    updateDoc(momentRef, {
+      likes: isLiked ? arrayRemove(user.uid) : arrayUnion(user.uid)
+    }).catch(async () => {
+      const permissionError = new FirestorePermissionError({
+        path: momentRef.path,
+        operation: 'update',
+        requestResourceData: { likes: isLiked ? 'arrayRemove' : 'arrayUnion' }
+      });
+      errorEmitter.emit('permission-error', permissionError);
+    });
+  };
 
   return (
     <div className="flex flex-col animate-fade-in bg-[#0E0C12] min-h-screen">
@@ -35,6 +57,8 @@ export default function MomentsPage() {
           moments.map((moment: any) => {
             const date = moment.createdAt?.toDate ? moment.createdAt.toDate() : new Date();
             const timeAgo = formatDistanceToNow(date, { addSuffix: true });
+            const isLiked = moment.likes?.includes(user?.uid);
+            const likeCount = moment.likes?.length || 0;
 
             return (
               <div 
@@ -77,6 +101,35 @@ export default function MomentsPage() {
                     />
                   </div>
                 )}
+
+                <div className="px-5 py-4 border-t border-white/5 flex items-center gap-6">
+                  <button 
+                    onClick={() => handleToggleLike(moment.id, moment.likes)}
+                    className="flex items-center gap-2 group transition-colors"
+                  >
+                    <div className={cn(
+                      "p-2 rounded-full transition-all duration-300",
+                      isLiked ? "bg-red-500/10 text-red-500" : "bg-white/5 text-muted-foreground group-hover:bg-red-500/5 group-hover:text-red-400"
+                    )}>
+                      <Heart size={20} className={cn(isLiked && "fill-current")} />
+                    </div>
+                    <span className={cn(
+                      "text-xs font-bold transition-colors",
+                      isLiked ? "text-red-500" : "text-muted-foreground"
+                    )}>
+                      {likeCount}
+                    </span>
+                  </button>
+
+                  <button className="flex items-center gap-2 group transition-colors">
+                    <div className="p-2 rounded-full bg-white/5 text-muted-foreground group-hover:bg-primary/5 group-hover:text-primary transition-all">
+                      <MessageSquare size={20} />
+                    </div>
+                    <span className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
+                      0
+                    </span>
+                  </button>
+                </div>
               </div>
             );
           })
@@ -91,7 +144,6 @@ export default function MomentsPage() {
         )}
       </div>
 
-      {/* FAB */}
       <Button 
         onClick={() => router.push('/moments/create')}
         className="fixed bottom-24 right-6 w-14 h-14 rounded-2xl bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/30 z-30 transition-transform active:scale-90"
