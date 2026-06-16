@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -31,9 +30,12 @@ export default function SignUpPage() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Submit button clicked, starting sign-up process...");
+    
     const { email, password, confirmPassword, username, displayName } = formData;
 
     if (!auth || !db) {
+      console.error("Firebase services not initialized");
       toast({
         title: "Configuration Error",
         description: "Firebase services are not yet available.",
@@ -52,11 +54,15 @@ export default function SignUpPage() {
     }
 
     setIsLoading(true);
+    console.log("Attempting to create user with email:", email);
+    
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      console.log("Auth user created successfully:", user.uid);
 
       // Create user profile in Firestore
+      console.log("Creating Firestore profile for user:", user.uid);
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         username: username.toLowerCase(),
@@ -68,6 +74,7 @@ export default function SignUpPage() {
         lastSeen: serverTimestamp(),
         createdAt: serverTimestamp()
       });
+      console.log("Firestore profile created successfully.");
 
       toast({
         title: "Welcome to Zynqo!",
@@ -76,10 +83,11 @@ export default function SignUpPage() {
 
       router.push('/profile-setup');
     } catch (error: any) {
-      console.error("Signup error:", error);
+      console.error("Signup error caught:", error);
       let message = "Failed to create account.";
       if (error.code === 'auth/email-already-in-use') message = "This email is already registered.";
       if (error.code === 'auth/weak-password') message = "Password should be at least 6 characters.";
+      if (error.code === 'permission-denied') message = "Firestore permission denied. Check your security rules.";
       
       toast({
         title: "Sign Up Failed",
