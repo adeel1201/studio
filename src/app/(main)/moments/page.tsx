@@ -100,7 +100,16 @@ export default function MomentsPage() {
                   </div>
                 )}
 
-                {moment.imageUrl && (
+                {moment.videoUrl ? (
+                  <div className="relative aspect-video w-full bg-black/40">
+                    <video 
+                      src={moment.videoUrl} 
+                      className="w-full h-full object-contain" 
+                      controls 
+                      preload="metadata"
+                    />
+                  </div>
+                ) : moment.imageUrl ? (
                   <div className="relative aspect-[4/3] w-full bg-muted/20">
                     <Image 
                       src={moment.imageUrl} 
@@ -110,7 +119,7 @@ export default function MomentsPage() {
                       data-ai-hint="lifestyle photography"
                     />
                   </div>
-                )}
+                ) : null}
 
                 <div className="px-5 py-4 border-t border-white/5 flex items-center gap-6">
                   <button 

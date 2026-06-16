@@ -9,7 +9,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AppHeader } from '@/components/zynqo/AppHeader';
-import { Camera, X, Send, Loader2, Image as ImageIcon } from 'lucide-react';
+import { Camera, X, Send, Loader2, Image as ImageIcon, Video as VideoIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 
@@ -24,13 +24,20 @@ export default function CreateMomentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<'image' | 'video' | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 20 * 1024 * 1024) { // 20MB limit
+        toast({ title: "File too large", description: "Please select a file smaller than 20MB", variant: "destructive" });
+        return;
+      }
+      const type = file.type.startsWith('video/') ? 'video' : 'image';
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
+      setFileType(type);
     }
   };
 
@@ -40,12 +47,19 @@ export default function CreateMomentPage() {
 
     setIsSubmitting(true);
     let imageUrl = '';
+    let videoUrl = '';
 
     try {
       if (selectedFile && storage) {
         const storageRef = ref(storage, `moments/${user.uid}/${Date.now()}_${selectedFile.name}`);
         const uploadTask = await uploadBytesResumable(storageRef, selectedFile);
-        imageUrl = await getDownloadURL(uploadTask.ref);
+        const downloadUrl = await getDownloadURL(uploadTask.ref);
+        
+        if (fileType === 'video') {
+          videoUrl = downloadUrl;
+        } else {
+          imageUrl = downloadUrl;
+        }
       }
 
       await addDoc(collection(db, 'moments'), {
@@ -54,6 +68,7 @@ export default function CreateMomentPage() {
         userPhoto: profile?.profilePhoto || '',
         content: content.trim(),
         imageUrl: imageUrl,
+        videoUrl: videoUrl,
         createdAt: serverTimestamp()
       });
 
@@ -81,14 +96,18 @@ export default function CreateMomentPage() {
           />
 
           {previewUrl && (
-            <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-white/10 group">
-              <Image src={previewUrl} alt="Preview" fill className="object-cover" />
+            <div className="relative aspect-video w-full rounded-2xl overflow-hidden border border-white/10 group bg-black/40">
+              {fileType === 'video' ? (
+                <video src={previewUrl} className="w-full h-full object-contain" controls />
+              ) : (
+                <Image src={previewUrl} alt="Preview" fill className="object-cover" />
+              )}
               <Button
                 type="button"
                 variant="destructive"
                 size="icon"
-                onClick={() => { setPreviewUrl(null); setSelectedFile(null); }}
-                className="absolute top-2 right-2 rounded-full h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={() => { setPreviewUrl(null); setSelectedFile(null); setFileType(null); }}
+                className="absolute top-2 right-2 rounded-full h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity z-10"
               >
                 <X size={16} />
               </Button>
@@ -102,14 +121,14 @@ export default function CreateMomentPage() {
               onClick={() => fileInputRef.current?.click()}
               className="rounded-xl border-white/10 bg-white/5 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all flex items-center gap-2"
             >
-              <ImageIcon size={20} />
-              <span>{selectedFile ? 'Change Photo' : 'Add Photo'}</span>
+              {selectedFile && fileType === 'video' ? <VideoIcon size={20} /> : <ImageIcon size={20} />}
+              <span>{selectedFile ? 'Change Media' : 'Add Image/Video'}</span>
             </Button>
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleFileSelect}
-              accept="image/*"
+              accept="image/*,video/*"
               className="hidden"
             />
           </div>

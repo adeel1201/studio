@@ -25,6 +25,10 @@
           "type": "string",
           "description": "Optional URL to an image stored in Firebase Storage."
         },
+        "videoUrl": {
+          "type": "string",
+          "description": "Optional URL to a video stored in Firebase Storage."
+        },
         "likes": {
           "type": "array",
           "items": {
