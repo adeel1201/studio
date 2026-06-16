@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { AppHeader } from '@/components/zynqo/AppHeader';
-import { Camera, Video, Send, Loader2, X, Image as ImageIcon } from 'lucide-react';
+import { Camera, Video, Send, Loader2, X, Image as ImageIcon, FileText } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import { Progress } from '@/components/ui/progress';
@@ -44,7 +44,7 @@ export default function CreateChannelPostPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !db || !selectedFile || !storage) return;
+    if (!user || !db || (!selectedFile && !caption.trim())) return;
 
     setIsSubmitting(true);
     try {
@@ -64,22 +64,27 @@ export default function CreateChannelPostPage() {
         });
       }
 
-      // 2. Upload Media
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `v-channels/${user.uid}/${Date.now()}.${fileExt}`;
-      const storageRef = ref(storage, fileName);
-      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+      let mediaUrl = '';
+      let mediaType = 'text';
 
-      await new Promise((resolve, reject) => {
-        uploadTask.on('state_changed', 
-          (snapshot) => setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
-          reject,
-          resolve
-        );
-      });
+      // 2. Upload Media if present
+      if (selectedFile && storage) {
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `v-channels/${user.uid}/${Date.now()}.${fileExt}`;
+        const storageRef = ref(storage, fileName);
+        const uploadTask = uploadBytesResumable(storageRef, selectedFile);
 
-      const mediaUrl = await getDownloadURL(uploadTask.snapshot.ref);
-      const mediaType = selectedFile.type.startsWith('video/') ? 'video' : 'image';
+        await new Promise((resolve, reject) => {
+          uploadTask.on('state_changed', 
+            (snapshot) => setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
+            reject,
+            resolve
+          );
+        });
+
+        mediaUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        mediaType = selectedFile.type.startsWith('video/') ? 'video' : 'image';
+      }
 
       // 3. Create Post
       await addDoc(collection(db, 'creatorPosts'), {
@@ -95,10 +100,10 @@ export default function CreateChannelPostPage() {
         timestamp: serverTimestamp()
       });
 
-      toast({ title: "Post Shared!", description: "Your video is now live on Channels." });
+      toast({ title: "Broadcast Shared!", description: "Your update is now live on Channels." });
       router.push('/v-channels');
     } catch (err: any) {
-      toast({ title: "Upload Failed", description: err.message, variant: "destructive" });
+      toast({ title: "Broadcast Failed", description: err.message, variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
@@ -106,7 +111,12 @@ export default function CreateChannelPostPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0E0C12] animate-fade-in pb-10 text-white">
-      <AppHeader title="New Broadcast" showSearch={false} showActions={false} />
+      <header className="sticky top-0 z-50 bg-card/80 backdrop-blur-xl safe-top px-4 h-16 flex items-center border-b border-white/5">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white mr-2">
+          <ChevronLeft size={24} />
+        </Button>
+        <h2 className="font-bold text-lg">Broadcast to Channels</h2>
+      </header>
 
       <form onSubmit={handleUpload} className="p-6 space-y-8">
         <div className="space-y-4">
@@ -119,8 +129,8 @@ export default function CreateChannelPostPage() {
                   <Video size={32} />
                 </div>
                 <div className="text-center px-6">
-                  <p className="font-bold text-sm">Select Creator Content</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-2">Support: MP4, MOV, JPG, PNG</p>
+                  <p className="font-bold text-sm">Tap to add Media</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-2">Optional: Channels supports text-only broadcasts too</p>
                 </div>
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="video/*,image/*" className="hidden" />
              </div>
@@ -134,7 +144,7 @@ export default function CreateChannelPostPage() {
                 <Button 
                   type="button" variant="ghost" size="icon" 
                   onClick={() => { setPreviewUrl(null); setSelectedFile(null); }}
-                  className="absolute top-4 right-4 bg-black/60 backdrop-blur-md rounded-full text-white z-20"
+                  className="absolute top-4 right-4 bg-black/40 backdrop-blur-md rounded-full text-white z-20"
                 >
                   <X size={20} />
                 </Button>
@@ -144,12 +154,13 @@ export default function CreateChannelPostPage() {
 
         <div className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest ml-1 text-primary">Content Caption</label>
+            <label className="text-[10px] font-black uppercase tracking-widest ml-1 text-primary">Broadcast Message</label>
             <Textarea 
-              placeholder="Add a catchy caption for your followers..." 
+              placeholder="What are you broadcasting today?..." 
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
-              className="min-h-[100px] bg-white/5 border-white/5 rounded-2xl focus-visible:ring-primary p-4 text-sm resize-none"
+              className="min-h-[120px] bg-white/5 border-white/5 rounded-2xl focus-visible:ring-primary p-4 text-sm resize-none"
+              required={!selectedFile}
             />
           </div>
 
@@ -163,11 +174,11 @@ export default function CreateChannelPostPage() {
           ) : (
             <Button 
               type="submit"
-              disabled={!selectedFile}
+              disabled={!selectedFile && !caption.trim()}
               className="w-full h-16 rounded-[2rem] bg-primary hover:bg-primary/90 font-black text-lg shadow-xl shadow-primary/20 flex items-center justify-center gap-3 transition-transform active:scale-95"
             >
               <Send size={24} />
-              Publish Now
+              Publish Broadcast
             </Button>
           )}
         </div>

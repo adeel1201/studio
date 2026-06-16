@@ -131,13 +131,13 @@
     },
     "CreatorPost": {
       "title": "CreatorPost",
-      "description": "A short video or photo post by a creator.",
+      "description": "A social content post in Video Channels.",
       "type": "object",
       "properties": {
         "creatorId": { "type": "string" },
         "creatorName": { "type": "string" },
         "creatorAvatar": { "type": "string" },
-        "type": { "type": "string", "enum": ["video", "image"] },
+        "type": { "type": "string", "enum": ["video", "image", "text"] },
         "mediaUrl": { "type": "string" },
         "caption": { "type": "string" },
         "likes": { "type": "array", "items": { "type": "string" } },
@@ -145,7 +145,7 @@
         "sharesCount": { "type": "number" },
         "timestamp": { "type": "string", "format": "date-time" }
       },
-      "required": ["creatorId", "type", "mediaUrl", "timestamp"]
+      "required": ["creatorId", "type", "timestamp"]
     },
     "SecurityLog": {
       "title": "SecurityLog",
@@ -258,7 +258,11 @@
     },
     "/creatorPosts/{postId}": {
       "schema": "CreatorPost",
-      "description": "Social content posts (video/image) in Video Channels."
+      "description": "Social content posts in Video Channels."
+    },
+    "/creatorPosts/{postId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a channel post."
     }
   }
 }

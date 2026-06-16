@@ -35,7 +35,7 @@ service cloud.firestore {
       }
     }
 
-    // Creator Channels (V-Channels)
+    // Creator Channels (WeChat-style V-Channels)
     match /creatorChannels/{channelId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
@@ -99,8 +99,9 @@ service cloud.firestore {
 
     // Calling system
     match /calls/{callId} {
-      allow read, write: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
       allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participantIds;
     }
 
     // Status / Stories
@@ -113,7 +114,8 @@ service cloud.firestore {
 
     // Catch-all for other collections (like internal tools)
     match /{document=**} {
-      allow read, write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
     }
   }
 }

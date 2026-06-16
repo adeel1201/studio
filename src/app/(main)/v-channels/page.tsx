@@ -3,7 +3,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useFirestore, useCollection, useMemoFirebase, useAuth } from '@/firebase';
-import { collection, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, orderBy, limit, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { 
@@ -17,11 +17,17 @@ import {
   ArrowLeft,
   Search,
   Zap,
-  PlayCircle
+  PlayCircle,
+  Trash2,
+  AlertCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { VCommentsDialog } from '@/components/zynqo/VCommentsDialog';
+import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
 
 const PAGE_SIZE = 5;
 
@@ -106,9 +112,11 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
   const { user } = useAuth();
   const db = useFirestore();
   const router = useRouter();
+  const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
 
   useEffect(() => {
     setIsLiked(post.likes?.includes(user?.uid));
@@ -117,7 +125,7 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
   const toggleLike = async () => {
     if (!db || !user) return;
     const postRef = doc(db, 'creatorPosts', post.id);
-    await updateDoc(postRef, {
+    updateDoc(postRef, {
       likes: isLiked ? arrayRemove(user.uid) : arrayUnion(user.uid)
     });
   };
@@ -132,6 +140,24 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
     setIsPlaying(!isPlaying);
   };
 
+  const handleDelete = async () => {
+    if (!db || !user || user.uid !== post.creatorId) return;
+    const postRef = doc(db, 'creatorPosts', post.id);
+    deleteDoc(postRef)
+      .then(() => {
+        toast({ title: "Post removed from your channel" });
+      })
+      .catch(async (err) => {
+        const permissionError = new FirestorePermissionError({
+          path: postRef.path,
+          operation: 'delete'
+        } satisfies SecurityRuleContext);
+        errorEmitter.emit('permission-error', permissionError);
+      });
+  };
+
+  const isMe = user?.uid === post.creatorId;
+
   return (
     <div ref={ref} className="h-screen w-full snap-start relative flex flex-col justify-center bg-black overflow-hidden">
       {post.type === 'video' ? (
@@ -145,9 +171,15 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
         />
-      ) : (
+      ) : post.type === 'image' ? (
         <div className="relative w-full h-full">
            <Image src={post.mediaUrl} alt="Post" fill className="object-contain" />
+        </div>
+      ) : (
+        <div className="h-full flex items-center justify-center p-12 bg-gradient-to-br from-primary/10 to-background">
+          <p className="text-xl font-medium text-center leading-relaxed text-white/90">
+            {post.caption}
+          </p>
         </div>
       )}
 
@@ -175,7 +207,7 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
            <span className="text-[10px] font-bold text-white shadow-sm">{post.likes?.length || 0}</span>
         </button>
 
-        <button className="flex flex-col items-center gap-1">
+        <button onClick={() => setIsCommentsOpen(true)} className="flex flex-col items-center gap-1">
            <div className="p-2 text-white transition-transform active:scale-125">
               <MessageCircle size={32} />
            </div>
@@ -188,21 +220,39 @@ const VideoPostCard = ({ post, ref }: { post: any, ref?: any }) => {
            </div>
            <span className="text-[10px] font-bold text-white shadow-sm">{post.sharesCount || 0}</span>
         </button>
+
+        {isMe && (
+          <button onClick={handleDelete} className="flex flex-col items-center gap-1 mt-2 opacity-50 hover:opacity-100 transition-opacity">
+            <div className="p-2 text-white">
+               <Trash2 size={24} />
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Info Overlay */}
-      <div className="absolute bottom-16 left-0 right-16 p-4 z-10 bg-gradient-to-t from-black/80 to-transparent">
-        <h4 className="font-bold text-white text-base mb-1" onClick={() => router.push(`/v-channels/${post.creatorId}`)}>
-          @{post.creatorName}
-        </h4>
-        <p className="text-sm text-white/90 line-clamp-2 leading-relaxed mb-3">
-          {post.caption}
-        </p>
-        <div className="flex items-center gap-2 text-white/60">
-           <Music2 size={12} className="animate-spin-slow" />
-           <span className="text-[10px] font-medium tracking-wide truncate">Original Sound - {post.creatorName}</span>
+      {(post.type !== 'text' || post.mediaUrl) && (
+        <div className="absolute bottom-16 left-0 right-16 p-4 z-10 bg-gradient-to-t from-black/80 to-transparent">
+          <h4 className="font-bold text-white text-base mb-1 cursor-pointer" onClick={() => router.push(`/v-channels/${post.creatorId}`)}>
+            @{post.creatorName}
+          </h4>
+          <p className="text-sm text-white/90 line-clamp-2 leading-relaxed mb-3">
+            {post.caption}
+          </p>
+          <div className="flex items-center gap-2 text-white/60">
+             <Music2 size={12} className="animate-spin-slow" />
+             <span className="text-[10px] font-medium tracking-wide truncate">Original Sound - {post.creatorName}</span>
+          </div>
         </div>
-      </div>
+      )}
+
+      {isCommentsOpen && (
+        <VCommentsDialog 
+          postId={post.id} 
+          isOpen={isCommentsOpen} 
+          onOpenChange={setIsCommentsOpen} 
+        />
+      )}
     </div>
   );
 };
