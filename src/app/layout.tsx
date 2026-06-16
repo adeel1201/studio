@@ -24,8 +24,8 @@ export const metadata: Metadata = {
     title: 'Zynqo',
   },
   icons: {
-    icon: '/icon.png',
-    apple: '/icon.png',
+    icon: '/icon-192.png',
+    apple: '/icon-192.png',
   },
 };
 
@@ -43,6 +43,8 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#6A0DAD" />
+        <link rel="icon" href="/icon-192.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body className="font-body antialiased bg-background text-foreground selection:bg-primary/30 min-h-screen">
         <FirebaseClientProvider>
