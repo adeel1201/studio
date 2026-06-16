@@ -16,7 +16,8 @@ import {
   MoreVertical,
   ArrowLeft,
   Search,
-  Zap
+  Zap,
+  PlayCircle
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
