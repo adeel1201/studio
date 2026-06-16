@@ -46,7 +46,7 @@ import { cn } from '@/lib/utils';
 export default function ChatDetailPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const db = useFirestore();
   const storage = useStorage();
   const { toast } = useToast();
@@ -180,6 +180,30 @@ export default function ChatDetailPage() {
     
     setInputText('');
     setAiSuggestions([]);
+  };
+
+  const handleStartCall = async (type: 'voice' | 'video') => {
+    if (!db || !user || !partnerId || !partnerProfile) return;
+
+    try {
+      const callsRef = collection(db, 'calls');
+      await addDoc(callsRef, {
+        callerId: user.uid,
+        callerName: profile?.displayName || 'Unknown',
+        callerPhoto: profile?.profilePhoto || '',
+        receiverId: partnerId,
+        receiverName: partnerProfile.displayName || 'Partner',
+        receiverPhoto: partnerProfile.profilePhoto || '',
+        participantIds: [user.uid, partnerId],
+        type,
+        status: 'ringing',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      toast({ title: `Initiating ${type} call...` });
+    } catch (err) {
+      toast({ title: "Failed to start call", variant: "destructive" });
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -350,10 +374,10 @@ export default function ChatDetailPage() {
         </div>
         
         <div className="flex items-center gap-1 pr-2">
-          <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 rounded-full h-10 w-10">
+          <Button variant="ghost" size="icon" onClick={() => handleStartCall('voice')} className="text-primary hover:bg-primary/10 rounded-full h-10 w-10">
             <Phone size={20} />
           </Button>
-          <Button variant="ghost" size="icon" className="text-primary hover:bg-primary/10 rounded-full h-10 w-10">
+          <Button variant="ghost" size="icon" onClick={() => handleStartCall('video')} className="text-primary hover:bg-primary/10 rounded-full h-10 w-10">
             <Video size={20} />
           </Button>
           <Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-white/5 rounded-full h-10 w-10">

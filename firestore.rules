@@ -25,7 +25,6 @@ service cloud.firestore {
     match /chats/{chatId} {
       allow read: if isAuthenticated() && (request.auth.uid in resource.data.participantIds);
       allow create: if isAuthenticated();
-      // Allow updates to typing indicators and lastMessage
       allow update: if isAuthenticated() && (request.auth.uid in resource.data.participantIds);
       
       // Messages sub-collection
@@ -34,6 +33,14 @@ service cloud.firestore {
         allow create: if isParticipant(chatId);
         allow update: if isParticipant(chatId);
       }
+    }
+
+    // Calls collection
+    match /calls/{callId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
     }
     
     match /{document=**} {
