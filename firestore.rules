@@ -2,30 +2,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Helper to check if user is authenticated
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    // Helper to check if user is operating on their own data
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function isParticipant(chatId) {
+      return isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds);
     }
 
-    // Users collection rules
+    // Users collection
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
-      allow update: if isOwner(userId);
-      allow delete: if false;
-
-      // Contacts sub-collection
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+      
       match /contacts/{contactId} {
-        allow read, write: if isOwner(userId);
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
       }
     }
 
-    // Chats collection rules
+    // Chats collection
     match /chats/{chatId} {
       allow read: if isAuthenticated() && (request.auth.uid in resource.data.participantIds);
       allow create: if isAuthenticated();
@@ -33,13 +29,12 @@ service cloud.firestore {
       
       // Messages sub-collection
       match /messages/{messageId} {
-        allow read: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds);
-        allow create: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds);
-        allow update: if isAuthenticated() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds);
+        allow read: if isParticipant(chatId);
+        allow create: if isParticipant(chatId);
+        allow update: if isParticipant(chatId);
       }
     }
     
-    // Fallback rule for safety (authenticated access only)
     match /{document=**} {
       allow read, write: if isAuthenticated();
     }

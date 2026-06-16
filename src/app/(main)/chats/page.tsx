@@ -10,7 +10,7 @@ import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where } from 'firebase/firestore';
 import { 
   Dialog, 
   DialogContent, 
@@ -19,8 +19,6 @@ import {
   DialogTrigger 
 } from '@/components/ui/dialog';
 import { useRouter } from 'next/navigation';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ChatsPage() {
   const { user } = useAuth();
@@ -31,7 +29,6 @@ export default function ChatsPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
 
-  // Load real chats from Firestore where current user is a participant
   const chatsQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(
@@ -42,7 +39,6 @@ export default function ChatsPage() {
 
   const { data: chats = [], loading: chatsLoading } = useCollection(chatsQuery);
 
-  // Load all users to get their presence status
   const usersQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(collection(db, 'users'));
@@ -50,7 +46,6 @@ export default function ChatsPage() {
 
   const { data: allUsers = [] } = useCollection(usersQuery);
 
-  // Create a user map for easy status lookup
   const userStatusMap = useMemo(() => {
     const map: Record<string, any> = {};
     allUsers.forEach((u: any) => {
@@ -59,7 +54,6 @@ export default function ChatsPage() {
     return map;
   }, [allUsers]);
 
-  // Sort and filter conversations for the main list
   const filteredChats = useMemo(() => {
     const sorted = [...chats].sort((a: any, b: any) => {
       const timeA = a.updatedAt?.toMillis?.() || 0;
@@ -78,7 +72,6 @@ export default function ChatsPage() {
     });
   }, [chats, searchQuery, user?.displayName]);
 
-  // Filter users for the "New Chat" dialog search
   const filteredUsers = useMemo(() => {
     return allUsers.filter((u: any) => {
       if (u.uid === user?.uid) return false;

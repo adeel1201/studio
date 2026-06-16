@@ -31,20 +31,9 @@ export default function UserProfilePage() {
   const [isContact, setIsContact] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
 
-  // Load target user profile
   const userRef = useMemoFirebase(() => (id && typeof id === 'string') ? doc(db, 'users', id) : null, [db, id]);
   const { data: targetProfile, loading: profileLoading } = useDoc(userRef);
 
-  // Check if target is a contact
-  useEffect(() => {
-    if (!user || !id || !db) return;
-    const contactRef = doc(db, 'users', user.uid, 'contacts', id as string);
-    // We can use a simple check here
-    const unsub = doc(db, 'users', user.uid, 'contacts', id as string);
-    // Since useDoc handles real-time, we could use that, but for simplicity:
-  }, [user, id, db]);
-
-  // Using useDoc for contact status
   const contactRef = useMemoFirebase(() => (user && id) ? doc(db, 'users', user.uid, 'contacts', id as string) : null, [db, user?.uid, id]);
   const { data: contactData } = useDoc(contactRef);
 
@@ -79,10 +68,9 @@ export default function UserProfilePage() {
     if (!user || !id || !db || !targetProfile) return;
     setIsActionLoading(true);
     try {
-      // Find existing chat
       const chatsRef = collection(db, 'chats');
       const q = query(chatsRef, 
-        where('type', '!=', 'group'),
+        where('type', '==', 'one-to-one'),
         where('participantIds', 'array-contains', user.uid)
       );
       const querySnapshot = await getDocs(q);
@@ -92,6 +80,7 @@ export default function UserProfilePage() {
         router.push(`/chats/${existingChat.id}`);
       } else {
         const newChat = await addDoc(chatsRef, {
+          type: 'one-to-one',
           participantIds: [user.uid, id],
           participantNames: [user.displayName || 'User', targetProfile.displayName || 'User'],
           updatedAt: serverTimestamp(),
@@ -99,12 +88,14 @@ export default function UserProfilePage() {
           lastMessage: {
             text: 'Started a new conversation',
             senderId: user.uid,
-            timestamp: serverTimestamp()
+            timestamp: serverTimestamp(),
+            status: 'sent'
           }
         });
         router.push(`/chats/${newChat.id}`);
       }
     } catch (err) {
+      console.error(err);
       toast({ title: "Failed to start chat", variant: "destructive" });
     } finally {
       setIsActionLoading(false);
@@ -148,9 +139,7 @@ export default function UserProfilePage() {
                 {targetProfile.displayName?.[0]}
               </AvatarFallback>
             </Avatar>
-            {isOnline && (
-              <div className="absolute bottom-2 right-2 w-7 h-7 bg-green-500 border-4 border-[#0E0C12] rounded-full shadow-lg" />
-            )}
+            {isOnline && <div className="absolute bottom-2 right-2 w-7 h-7 bg-green-500 border-4 border-[#0E0C12] rounded-full shadow-lg" />}
           </div>
           <div className="text-center">
             <h3 className="text-2xl font-headline font-bold flex items-center justify-center gap-1.5">
@@ -166,18 +155,11 @@ export default function UserProfilePage() {
         <div className="flex gap-3">
           {!isMe && (
             <>
-              <Button 
-                onClick={startChat}
-                disabled={isActionLoading}
-                className="flex-1 h-12 rounded-2xl bg-primary hover:bg-primary/90 font-bold"
-              >
-                <MessageSquare size={18} className="mr-2" />
-                Message
+              <Button onClick={startChat} disabled={isActionLoading} className="flex-1 h-12 rounded-2xl bg-primary hover:bg-primary/90 font-bold">
+                <MessageSquare size={18} className="mr-2" /> Message
               </Button>
               <Button 
-                variant="outline"
-                onClick={toggleContact}
-                disabled={isActionLoading}
+                variant="outline" onClick={toggleContact} disabled={isActionLoading}
                 className={`flex-1 h-12 rounded-2xl border-white/10 ${isContact ? 'text-destructive hover:bg-destructive/10' : 'text-primary hover:bg-primary/10'}`}
               >
                 {isActionLoading ? <Loader2 size={18} className="animate-spin" /> : (
@@ -186,14 +168,7 @@ export default function UserProfilePage() {
               </Button>
             </>
           )}
-          {isMe && (
-            <Button 
-              onClick={() => router.push('/profile/edit')}
-              className="w-full h-12 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 font-bold"
-            >
-              Edit My Profile
-            </Button>
-          )}
+          {isMe && <Button onClick={() => router.push('/profile/edit')} className="w-full h-12 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 font-bold">Edit My Profile</Button>}
         </div>
 
         <div className="bg-card/30 rounded-[2rem] p-6 border border-white/5 space-y-4">
@@ -203,31 +178,21 @@ export default function UserProfilePage() {
               <p className="text-sm text-muted-foreground leading-relaxed italic">"{targetProfile.bio}"</p>
             </div>
           )}
-
           <div className="grid grid-cols-2 gap-4 pt-2">
             <div className="flex items-center gap-2 text-muted-foreground">
               <Globe size={16} className="text-primary/60" />
               <div className="flex flex-col">
-                <span className="text-[8px] uppercase font-bold tracking-tighter opacity-50">Location</span>
+                <span className="text-[8px] uppercase font-bold opacity-50">Location</span>
                 <span className="text-xs font-semibold">{targetProfile.country || 'Not specified'}</span>
               </div>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <Calendar size={16} className="text-primary/60" />
               <div className="flex flex-col">
-                <span className="text-[8px] uppercase font-bold tracking-tighter opacity-50">Joined</span>
-                <span className="text-xs font-semibold">
-                  {targetProfile.createdAt ? new Date(targetProfile.createdAt.seconds * 1000).toLocaleDateString() : 'Recent'}
-                </span>
+                <span className="text-[8px] uppercase font-bold opacity-50">Joined</span>
+                <span className="text-xs font-semibold">{targetProfile.createdAt ? new Date(targetProfile.createdAt.seconds * 1000).toLocaleDateString() : 'Recent'}</span>
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Recent Activity</h4>
-          <div className="bg-card/20 rounded-[2rem] border border-white/5 p-8 text-center">
-            <p className="text-[10px] uppercase font-bold tracking-widest opacity-30">No public activity shared yet</p>
           </div>
         </div>
       </div>
