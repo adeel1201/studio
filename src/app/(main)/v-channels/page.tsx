@@ -62,8 +62,10 @@ export default function VChannelsPage() {
       );
     }
 
+    // For You Feed: WeChat Style - Show only public content globally
     return query(
       collection(db, 'creatorPosts'),
+      where('privacy', '==', 'public'), // Only public posts in global feed
       orderBy('likeCount', 'desc'),
       orderBy('timestamp', 'desc'),
       limit(limitCount)

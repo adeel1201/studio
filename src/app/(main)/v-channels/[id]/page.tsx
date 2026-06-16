@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
@@ -18,6 +19,7 @@ import {
 } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
   ChevronLeft, 
   Grid, 
@@ -32,7 +34,10 @@ import {
   Lock,
   Bookmark,
   Plus,
-  PlayCircle
+  PlayCircle,
+  Globe,
+  EyeOff,
+  UserCheck
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
@@ -81,11 +86,15 @@ export default function CreatorChannelProfilePage() {
   const { data: posts = [], loading: postsLoading } = useCollection(postsQuery);
 
   // Check if following
-  const followRef = useMemoFirebase(() => (user && id) ? doc(db, 'user_follows', `${user.uid}_${id}`) : null, [db, user?.uid, id]);
+  const followId = user && id ? `${user.uid}_${id}` : null;
+  const followRef = useMemoFirebase(() => (followId) ? doc(db, 'user_follows', followId) : null, [db, followId]);
   const { data: followData, loading: followLoading } = useDoc(followRef);
   const isFollowing = !!followData;
 
-  const isMe = user?.uid === id;
+  const isMe = user?.uid === channel?.creatorId;
+  const isPrivate = channel?.privacy === 'private';
+  const isHidden = channel?.privacy === 'hidden';
+  const canViewContent = !isPrivate || isFollowing || isMe;
 
   const handleFollow = async () => {
     if (!db || !user || !id || isMe) return;
@@ -114,18 +123,7 @@ export default function CreatorChannelProfilePage() {
     }
   };
 
-  const handleDeleteChannel = async () => {
-    if (!db || !id || !isMe) return;
-    try {
-      await deleteDoc(doc(db, 'creatorChannels', id as string));
-      toast({ title: "Channel Deleted" });
-      router.push('/v-channels');
-    } catch (err) {
-      toast({ title: "Error", variant: "destructive" });
-    }
-  };
-
-  if (channelLoading || postsLoading || followLoading) return (
+  if (channelLoading || followLoading) return (
     <div className="h-screen bg-[#0E0C12] flex items-center justify-center">
        <Loader2 className="animate-spin text-primary" size={32} />
     </div>
@@ -134,160 +132,181 @@ export default function CreatorChannelProfilePage() {
   if (!channel) return (
     <div className="h-screen bg-[#0E0C12] flex flex-col items-center justify-center p-8 text-center gap-4">
        <p className="text-muted-foreground">Channel not found.</p>
-       <Button onClick={() => router.push('/v-channels')} variant="outline">Back to Feed</Button>
+       <Button onClick={() => router.push('/v-channels')} variant="outline" className="rounded-2xl">Back to Feed</Button>
     </div>
   );
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0E0C12] text-white pb-20 animate-fade-in relative">
-      {/* TikTok Style Header */}
-      <div className="relative w-full">
-         <header className="sticky top-0 z-50 safe-top flex items-center justify-between px-2 h-16 bg-[#0E0C12]/80 backdrop-blur-xl border-b border-white/5">
-            <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white rounded-full">
-              <ChevronLeft size={28} />
-            </Button>
-            <h1 className="font-bold text-sm truncate max-w-[200px]">{channel.name}</h1>
-            <div className="flex gap-1">
-              <Button variant="ghost" size="icon" className="text-white rounded-full">
-                <Share2 size={20} />
+      <header className="sticky top-0 z-50 safe-top flex items-center justify-between px-2 h-16 bg-[#0E0C12]/80 backdrop-blur-xl border-b border-white/5">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white rounded-full">
+          <ChevronLeft size={28} />
+        </Button>
+        <div className="flex flex-col items-center">
+           <h1 className="font-bold text-sm truncate max-w-[150px]">{channel.name}</h1>
+           <span className="text-[8px] font-black uppercase tracking-widest text-primary/60 flex items-center gap-1">
+              {isPrivate ? <Lock size={8} /> : isHidden ? <EyeOff size={8} /> : <Globe size={8} />}
+              {channel.privacy || 'public'}
+           </span>
+        </div>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="icon" className="text-white rounded-full">
+            <Share2 size={20} />
+          </Button>
+          <Button variant="ghost" size="icon" className="text-white rounded-full">
+            <MoreVertical size={20} />
+          </Button>
+        </div>
+      </header>
+
+      <div className="px-6 pt-6 flex flex-col items-center">
+        <div className="relative">
+           <Avatar className="w-24 h-24 border-2 border-white/5 shadow-2xl">
+              <AvatarImage src={channel.avatar} />
+              <AvatarFallback className="text-3xl font-bold bg-primary/10 text-primary">{channel.name?.[0]}</AvatarFallback>
+           </Avatar>
+           {channel.isVerified && (
+             <div className="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1 border-2 border-[#0E0C12]">
+               <ShieldCheck size={14} />
+             </div>
+           )}
+        </div>
+        
+        <div className="mt-4 text-center">
+           <h3 className="text-lg font-bold">@{channel.username}</h3>
+           {isMe ? (
+              <Button 
+                onClick={() => router.push(`/v-channels/edit/${id}`)}
+                variant="outline"
+                className="mt-4 h-10 px-8 rounded-xl bg-white/5 border-white/10 text-xs font-bold hover:bg-white/10"
+              >
+                <Edit3 size={14} className="mr-2" /> Edit Channel
               </Button>
-              <Button variant="ghost" size="icon" className="text-white rounded-full">
-                <MoreVertical size={20} />
+           ) : (
+              <Button 
+                onClick={handleFollow}
+                className={cn(
+                  "mt-4 h-10 px-12 rounded-xl font-bold transition-all text-xs",
+                  isFollowing ? "bg-white/5 border border-white/10 text-white" : "bg-primary text-white shadow-lg shadow-primary/20"
+                )}
+              >
+                {isFollowing ? <><UserCheck size={14} className="mr-2" /> Following</> : 'Follow'}
               </Button>
-            </div>
-         </header>
+           )}
+        </div>
 
-         <div className="px-6 pt-6 flex flex-col items-center">
-            <div className="relative">
-               <Avatar className="w-24 h-24 border-2 border-white/5 shadow-2xl">
-                  <AvatarImage src={channel.avatar} />
-                  <AvatarFallback className="text-3xl font-bold bg-primary/10 text-primary">{channel.name?.[0]}</AvatarFallback>
-               </Avatar>
-               {channel.isVerified && (
-                 <div className="absolute bottom-0 right-0 bg-primary text-white rounded-full p-1 border-2 border-[#0E0C12]">
-                   <ShieldCheck size={14} />
-                 </div>
-               )}
-            </div>
-            
-            <div className="mt-4 text-center">
-               <h3 className="text-lg font-bold">@{channel.username}</h3>
-               {isMe ? (
-                  <Button 
-                    onClick={() => router.push(`/v-channels/edit/${channel.id}`)}
-                    variant="outline"
-                    className="mt-4 h-10 px-8 rounded-lg bg-white/5 border-white/10 text-xs font-bold hover:bg-white/10"
-                  >
-                    Edit Profile
-                  </Button>
-               ) : (
-                  <Button 
-                    onClick={handleFollow}
-                    className={cn(
-                      "mt-4 h-10 px-12 rounded-lg font-bold transition-all text-xs",
-                      isFollowing ? "bg-white/5 border border-white/10 text-white" : "bg-primary text-white shadow-lg shadow-primary/20"
-                    )}
-                  >
-                    {isFollowing ? 'Following' : 'Follow'}
-                  </Button>
-               )}
-            </div>
+        <div className="mt-6 flex items-center gap-6">
+           <button onClick={() => setActiveStatModal('following')} className="flex items-center gap-1.5 hover:opacity-70 transition-opacity">
+              <span className="font-black text-sm">{channel.followingCount || 0}</span>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Following</span>
+           </button>
+           <button onClick={() => setActiveStatModal('followers')} className="flex items-center gap-1.5 hover:opacity-70 transition-opacity">
+              <span className="font-black text-sm">{channel.followerCount || 0}</span>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Followers</span>
+           </button>
+           <div className="flex items-center gap-1.5">
+              <span className="font-black text-sm">{channel.totalLikes || 0}</span>
+              <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Likes</span>
+           </div>
+        </div>
 
-            {/* TikTok Stats Row */}
-            <div className="mt-6 flex items-center gap-6">
-               <button onClick={() => setActiveStatModal('following')} className="flex items-center gap-1.5 hover:opacity-70 transition-opacity">
-                  <span className="font-black text-sm">{channel.followingCount || 0}</span>
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Following</span>
-               </button>
-               <button onClick={() => setActiveStatModal('followers')} className="flex items-center gap-1.5 hover:opacity-70 transition-opacity">
-                  <span className="font-black text-sm">{channel.followerCount || 0}</span>
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Followers</span>
-               </button>
-               <div className="flex items-center gap-1.5">
-                  <span className="font-black text-sm">{channel.totalLikes || 0}</span>
-                  <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Likes</span>
-               </div>
-            </div>
-
-            {channel.bio && (
-              <p className="mt-4 text-xs text-center text-muted-foreground leading-relaxed px-4 max-w-xs">
-                {channel.bio}
-              </p>
-            )}
-         </div>
+        {channel.bio && (
+          <p className="mt-4 text-xs text-center text-muted-foreground leading-relaxed px-4 max-w-xs italic">
+            "{channel.bio}"
+          </p>
+        )}
       </div>
 
-      {/* Content Tabs */}
-      <Tabs defaultValue="videos" className="w-full mt-8">
-        <TabsList className="w-full h-12 bg-transparent border-y border-white/5 p-0 rounded-none flex">
-          <TabsTrigger value="videos" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
-             <Grid size={18} />
-          </TabsTrigger>
-          <TabsTrigger value="liked" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
-             <Heart size={18} />
-          </TabsTrigger>
-          <TabsTrigger value="private" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
-             <Lock size={18} />
-          </TabsTrigger>
-        </TabsList>
+      {!canViewContent ? (
+        <div className="mt-12 flex flex-col items-center justify-center p-12 text-center bg-card/20 border-y border-white/5">
+           <div className="w-16 h-16 rounded-3xl bg-white/5 flex items-center justify-center text-muted-foreground mb-6">
+              <Lock size={32} />
+           </div>
+           <h4 className="font-bold text-lg">Private Channel</h4>
+           <p className="text-xs text-muted-foreground mt-2 leading-relaxed max-w-[200px]">
+              Only approved followers can see the content shared by @{channel.username}.
+           </p>
+           {!isFollowing && (
+              <Button 
+                onClick={handleFollow}
+                className="mt-6 rounded-2xl bg-primary px-8 h-12 font-bold shadow-lg shadow-primary/20"
+              >
+                Follow to Request Access
+              </Button>
+           )}
+        </div>
+      ) : (
+        <Tabs defaultValue="videos" className="w-full mt-8">
+          <TabsList className="w-full h-12 bg-transparent border-y border-white/5 p-0 rounded-none flex">
+            <TabsTrigger value="videos" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
+               <Grid size={18} />
+            </TabsTrigger>
+            <TabsTrigger value="liked" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
+               <Heart size={18} />
+            </TabsTrigger>
+            <TabsTrigger value="private" className="flex-1 rounded-none border-b-2 border-transparent data-[state=active]:border-primary bg-transparent text-muted-foreground data-[state=active]:text-primary transition-all">
+               <Lock size={18} />
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="videos" className="mt-0">
-          <div className="grid grid-cols-3 gap-0.5">
-            {posts.map((post: any) => (
-              <div key={post.id} onClick={() => router.push('/v-channels')} className="relative aspect-[3/4] bg-white/5 overflow-hidden cursor-pointer group">
-                  {post.type === 'video' ? (
-                    <video src={post.mediaUrl} className="w-full h-full object-cover" muted playsInline />
-                  ) : post.type === 'image' ? (
-                    <Image src={post.mediaUrl} alt="Post" fill className="object-cover" />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center p-4 text-[10px] text-muted-foreground italic text-center">"{post.caption}"</div>
-                  )}
-                  <div className="absolute bottom-1.5 left-2 flex items-center gap-1">
-                    <PlayCircle size={10} className="text-white fill-current" />
-                    <span className="text-[10px] font-bold text-white drop-shadow-md">{post.viewCount || 0}</span>
-                  </div>
-              </div>
-            ))}
-          </div>
-          {posts.length === 0 && (
-            <div className="py-20 flex flex-col items-center text-center px-8 gap-4">
-              <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center text-muted-foreground opacity-20">
-                <VideoIcon size={40} />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-white/60 uppercase tracking-widest">No broadcasts yet</p>
-                <p className="text-xs text-muted-foreground">Start sharing your social broadcasts with the world.</p>
-              </div>
-              {isMe && (
-                <Button 
-                  onClick={() => router.push('/v-channels/create')}
-                  className="rounded-full bg-primary px-8 mt-2 h-11 font-bold shadow-lg shadow-primary/20"
-                >
-                  Upload Your First Video
-                </Button>
-              )}
+          <TabsContent value="videos" className="mt-0">
+            <div className="grid grid-cols-3 gap-0.5">
+              {posts.map((post: any) => (
+                <div key={post.id} onClick={() => router.push('/v-channels')} className="relative aspect-[3/4] bg-white/5 overflow-hidden cursor-pointer group">
+                    {post.type === 'video' ? (
+                      <video src={post.mediaUrl} className="w-full h-full object-cover" muted playsInline />
+                    ) : post.type === 'image' ? (
+                      <Image src={post.mediaUrl} alt="Post" fill className="object-cover" />
+                    ) : (
+                      <div className="h-full w-full flex items-center justify-center p-4 text-[10px] text-muted-foreground italic text-center">"{post.caption}"</div>
+                    )}
+                    <div className="absolute bottom-1.5 left-2 flex items-center gap-1">
+                      <PlayCircle size={10} className="text-white fill-current" />
+                      <span className="text-[10px] font-bold text-white drop-shadow-md">{post.viewCount || 0}</span>
+                    </div>
+                </div>
+              ))}
             </div>
-          )}
-        </TabsContent>
+            {posts.length === 0 && (
+              <div className="py-20 flex flex-col items-center text-center px-8 gap-4">
+                <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center text-muted-foreground opacity-20">
+                  <VideoIcon size={40} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-bold text-white/60 uppercase tracking-widest">No broadcasts yet</p>
+                  <p className="text-xs text-muted-foreground">Start sharing your social broadcasts with the world.</p>
+                </div>
+                {isMe && (
+                  <Button 
+                    onClick={() => router.push('/v-channels/create')}
+                    className="rounded-full bg-primary px-8 mt-2 h-11 font-bold shadow-lg shadow-primary/20"
+                  >
+                    Upload Your First Video
+                  </Button>
+                )}
+              </div>
+            )}
+          </TabsContent>
 
-        <TabsContent value="liked">
-           <div className="py-20 flex flex-col items-center text-muted-foreground/40 text-center px-8">
-              <Lock size={40} className="mb-4" />
-              <h4 className="text-sm font-bold text-white mb-1">This user's liked videos are private</h4>
-              <p className="text-xs">Videos liked by @{channel.username} are only visible to them.</p>
-           </div>
-        </TabsContent>
+          <TabsContent value="liked">
+             <div className="py-20 flex flex-col items-center text-muted-foreground/40 text-center px-8">
+                <Lock size={40} className="mb-4" />
+                <h4 className="text-sm font-bold text-white mb-1">Liked videos are restricted</h4>
+                <p className="text-xs">Only the channel owner can view their interactions.</p>
+             </div>
+          </TabsContent>
 
-        <TabsContent value="private">
-           <div className="py-20 flex flex-col items-center text-muted-foreground/40">
-              <Lock size={40} className="mb-2" />
-              <p className="text-xs font-bold uppercase tracking-widest">Private drafts</p>
-           </div>
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="private">
+             <div className="py-20 flex flex-col items-center text-muted-foreground/40">
+                <Lock size={40} className="mb-2" />
+                <p className="text-xs font-bold uppercase tracking-widest">Drafts Folder</p>
+             </div>
+          </TabsContent>
+        </Tabs>
+      )}
 
       {/* Owner-only Floating Upload Button */}
-      {isMe && posts.length > 0 && (
+      {isMe && (
         <Button 
           onClick={() => router.push('/v-channels/create')}
           className="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-primary hover:bg-primary/90 shadow-2xl shadow-primary/30 z-50 transition-transform active:scale-90 flex items-center justify-center"

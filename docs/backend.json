@@ -6,78 +6,29 @@
       "description": "A social post shared by a user.",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "description": "The UID of the user who created the moment."
-        },
-        "userName": {
-          "type": "string",
-          "description": "The display name of the user."
-        },
-        "userPhoto": {
-          "type": "string",
-          "description": "The profile photo URL of the user."
-        },
-        "content": {
-          "type": "string",
-          "description": "The text content of the moment."
-        },
-        "imageUrl": {
-          "type": "string",
-          "description": "Optional URL to an image stored in Firebase Storage."
-        },
-        "videoUrl": {
-          "type": "string",
-          "description": "Optional URL to a video stored in Firebase Storage."
-        },
-        "likes": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "List of user UIDs who liked this moment."
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time",
-          "description": "The timestamp when the moment was created."
-        }
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "userId",
-        "userName",
-        "content",
-        "createdAt"
-      ]
+      "required": ["userId", "userName", "content", "createdAt"]
     },
     "Comment": {
       "title": "Comment",
       "description": "A comment on a moment.",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string"
-        },
-        "userName": {
-          "type": "string"
-        },
-        "userPhoto": {
-          "type": "string"
-        },
-        "text": {
-          "type": "string"
-        },
-        "createdAt": {
-          "type": "string",
-          "format": "date-time"
-        }
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": [
-        "userId",
-        "userName",
-        "text",
-        "createdAt"
-      ]
+      "required": ["userId", "userName", "text", "createdAt"]
     },
     "Channel": {
       "title": "Channel",
@@ -91,25 +42,9 @@
         "adminIds": { "type": "array", "items": { "type": "string" } },
         "followerIds": { "type": "array", "items": { "type": "string" } },
         "createdAt": { "type": "string", "format": "date-time" },
-        "updatedAt": { "type": "string", "format": "date-time" },
-        "lastPost": { "type": "object" },
-        "latitude": { "type": "number" },
-        "longitude": { "type": "number" }
+        "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "adminIds", "type", "createdAt"]
-    },
-    "ChannelPost": {
-      "title": "ChannelPost",
-      "description": "A broadcast message in a channel.",
-      "type": "object",
-      "properties": {
-        "content": { "type": "string" },
-        "mediaUrl": { "type": "string" },
-        "mediaType": { "type": "string" },
-        "authorId": { "type": "string" },
-        "timestamp": { "type": "string", "format": "date-time" }
-      },
-      "required": ["content", "authorId", "timestamp"]
     },
     "CreatorChannel": {
       "title": "CreatorChannel",
@@ -121,15 +56,14 @@
         "username": { "type": "string" },
         "bio": { "type": "string" },
         "avatar": { "type": "string" },
-        "banner": { "type": "string" },
-        "category": { "type": "string" },
+        "privacy": { "type": "string", "enum": ["public", "private", "hidden"] },
         "followerCount": { "type": "number" },
         "followingCount": { "type": "number" },
         "totalLikes": { "type": "number" },
         "isVerified": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["creatorId", "name", "username"]
+      "required": ["creatorId", "name", "username", "privacy"]
     },
     "CreatorPost": {
       "title": "CreatorPost",
@@ -137,16 +71,11 @@
       "type": "object",
       "properties": {
         "creatorId": { "type": "string" },
-        "creatorName": { "type": "string" },
-        "creatorAvatar": { "type": "string" },
         "type": { "type": "string", "enum": ["video", "image", "text"] },
         "mediaUrl": { "type": "string" },
         "caption": { "type": "string" },
-        "likes": { "type": "array", "items": { "type": "string" } },
+        "privacy": { "type": "string" },
         "likeCount": { "type": "number" },
-        "commentsCount": { "type": "number" },
-        "sharesCount": { "type": "number" },
-        "viewCount": { "type": "number" },
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["creatorId", "type", "timestamp"]
@@ -162,127 +91,42 @@
       },
       "required": ["followerId", "followingId", "createdAt"]
     },
-    "SecurityLog": {
-      "title": "SecurityLog",
-      "description": "A record of security-related events for a user.",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "type": { "type": "string", "enum": ["login", "logout", "password_change", "mfa_enabled", "mfa_disabled", "email_verified"] },
-        "timestamp": { "type": "string", "format": "date-time" },
-        "deviceInfo": { "type": "string" },
-        "ipAddress": { "type": "string" },
-        "status": { "type": "string", "enum": ["success", "failure"] }
-      }
-    },
-    "Device": {
-      "title": "Device",
-      "description": "A registered device or session for a user.",
-      "type": "object",
-      "properties": {
-        "userId": { "type": "string" },
-        "deviceName": { "type": "string" },
-        "browser": { "type": "string" },
-        "os": { "type": "string" },
-        "lastActive": { "type": "string", "format": "date-time" },
-        "isCurrent": { "type": "boolean" }
-      }
-    },
     "User": {
       "title": "User",
-      "description": "User profile with discovery settings and application preferences.",
+      "description": "User profile with discovery settings.",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
         "username": { "type": "string" },
         "displayName": { "type": "string" },
         "profilePhoto": { "type": "string" },
-        "bio": { "type": "string" },
-        "country": { "type": "string" },
-        "latitude": { "type": "number" },
-        "longitude": { "type": "number" },
-        "hideLocation": { "type": "boolean" },
-        "lastSeen": { "type": "string", "format": "date-time" },
-        "onlineStatus": { "type": "string" },
-        "mfaEnabled": { "type": "boolean" },
-        "followingCount": { "type": "number" },
-        "settings": {
-          "type": "object",
-          "properties": {
-            "theme": { "type": "string", "enum": ["dark", "light", "system"] },
-            "language": { "type": "string" },
-            "notifications": {
-              "type": "object",
-              "properties": {
-                "messages": { "type": "boolean" },
-                "calls": { "type": "boolean" },
-                "moments": { "type": "boolean" },
-                "channels": { "type": "boolean" },
-                "security": { "type": "boolean" }
-              }
-            },
-            "privacy": {
-              "type": "object",
-              "properties": {
-                "blockedUserIds": { "type": "array", "items": { "type": "string" } },
-                "mutedChatIds": { "type": "array", "items": { "type": "string" } },
-                "readReceipts": { "type": "boolean" }
-              }
-            }
-          }
-        }
+        "followingCount": { "type": "number" }
       }
     }
   },
   "auth": {
-    "providers": [
-      "email"
-    ]
+    "providers": ["email"]
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "Global user directory."
     },
-    "/users/{userId}/securityLogs/{logId}": {
-      "schema": "SecurityLog",
-      "description": "Security events for a user."
-    },
-    "/users/{userId}/devices/{deviceId}": {
-      "schema": "Device",
-      "description": "Registered sessions for a user."
-    },
     "/moments/{momentId}": {
       "schema": "Moment",
-      "description": "Collection of social moments shared by users."
-    },
-    "/moments/{momentId}/comments/{commentId}": {
-      "schema": "Comment",
-      "description": "Comments on a specific moment."
-    },
-    "/channels/{channelId}": {
-      "schema": "Channel",
-      "description": "Broadcast channels."
-    },
-    "/channels/{channelId}/posts/{postId}": {
-      "schema": "ChannelPost",
-      "description": "Posts within a channel."
+      "description": "Social moments."
     },
     "/creatorChannels/{channelId}": {
       "schema": "CreatorChannel",
-      "description": "Public content creator channels."
+      "description": "Video creator profiles."
     },
     "/creatorPosts/{postId}": {
       "schema": "CreatorPost",
-      "description": "Social content posts in Video Channels."
-    },
-    "/creatorPosts/{postId}/comments/{commentId}": {
-      "schema": "Comment",
-      "description": "Comments on a channel post."
+      "description": "Video channel posts."
     },
     "/user_follows/{followId}": {
       "schema": "UserFollow",
-      "description": "Scalable follow relationships."
+      "description": "Follow relationships."
     }
   }
 }

@@ -26,12 +26,14 @@ import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { collection, query, where } from 'firebase/firestore';
 import Link from 'next/link';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ProfilePage() {
   const { user, profile, loading: authLoading } = useZynqoAuth();
   const auth = useAuth();
   const db = useFirestore();
   const router = useRouter();
+  const { toast } = useToast();
 
   // Fetch my channels
   const myChannelsQuery = useMemoFirebase(() => {
@@ -61,6 +63,18 @@ export default function ProfilePage() {
     } catch (error) {
       console.error("Sign out error", error);
     }
+  };
+
+  const handleCreateChannel = () => {
+    if (myChannels.length >= 3) {
+      toast({ 
+        title: "Channel Limit Reached", 
+        description: "You can create up to 3 channels per account.",
+        variant: "destructive"
+      });
+      return;
+    }
+    router.push('/v-channels/setup');
   };
 
   const formatJoinedDate = (timestamp: any) => {
@@ -99,32 +113,44 @@ export default function ProfilePage() {
       <div className="p-4 space-y-6">
         {/* Creator Section */}
         <section className="space-y-3">
-          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Content Creator</h4>
+          <div className="flex items-center justify-between ml-2">
+            <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Content Creator</h4>
+            <span className="text-[10px] font-black text-primary/40">{myChannels.length}/3 Channels</span>
+          </div>
           <div className="bg-card/40 rounded-[2rem] border border-white/5 overflow-hidden">
             {channelsLoading ? (
               <div className="p-6 flex justify-center"><Loader2 className="animate-spin text-primary/30" size={20} /></div>
             ) : myChannels.length > 0 ? (
-              myChannels.map((channel: any) => (
-                <Link 
-                  key={channel.id} 
-                  href={`/v-channels/${channel.id}`}
-                  className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5 last:border-none"
-                >
-                  <div className="flex items-center gap-4">
-                    <Avatar className="w-10 h-10 rounded-xl border border-primary/20">
-                      <AvatarImage src={channel.avatar} />
-                      <AvatarFallback><PlayCircle size={20} /></AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold">{channel.name}</span>
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Manage My Channel</span>
+              <>
+                {myChannels.map((channel: any) => (
+                  <Link 
+                    key={channel.id} 
+                    href={`/v-channels/${channel.id}`}
+                    className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5 last:border-none"
+                  >
+                    <div className="flex items-center gap-4">
+                      <Avatar className="w-10 h-10 rounded-xl border border-primary/20">
+                        <AvatarImage src={channel.avatar} />
+                        <AvatarFallback><PlayCircle size={20} /></AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold">{channel.name}</span>
+                        <span className="text-[9px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1.5">
+                           {channel.privacy || 'public'} channel
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <ChevronRight size={16} className="text-muted-foreground/30" />
-                </Link>
-              ))
+                    <ChevronRight size={16} className="text-muted-foreground/30" />
+                  </Link>
+                ))}
+                {myChannels.length < 3 && (
+                  <button onClick={handleCreateChannel} className="w-full p-4 flex items-center gap-3 text-primary/60 hover:text-primary transition-colors text-xs font-bold uppercase tracking-widest bg-primary/5">
+                    <Plus size={14} /> Create Another Channel
+                  </button>
+                )}
+              </>
             ) : (
-              <Link href="/v-channels/setup" className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors group">
+              <button onClick={handleCreateChannel} className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
                     <Plus size={20} />
@@ -135,7 +161,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <ChevronRight size={16} className="text-muted-foreground/30" />
-              </Link>
+              </button>
             )}
           </div>
         </section>

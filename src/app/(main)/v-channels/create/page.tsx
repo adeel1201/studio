@@ -4,12 +4,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { useFirestore, useStorage, useDoc, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, serverTimestamp, doc } from 'firebase/firestore';
+import { useFirestore, useStorage, useDoc, useMemoFirebase, useCollection } from '@/firebase';
+import { collection, addDoc, serverTimestamp, doc, query, where } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Video, Send, Loader2, X, ChevronLeft } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Video, Send, Loader2, X, ChevronLeft, PlayCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import { Progress } from '@/components/ui/progress';
@@ -26,18 +27,25 @@ export default function CreateChannelPostPage() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [targetChannelId, setTargetChannelId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Check if channel exists, if not redirect to setup
-  const channelRef = useMemoFirebase(() => (user?.uid && db) ? doc(db, 'creatorChannels', user.uid) : null, [db, user?.uid]);
-  const { data: channel, loading: channelLoading } = useDoc(channelRef);
+  // Fetch all my channels to choose where to post
+  const myChannelsQuery = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return query(collection(db, 'creatorChannels'), where('creatorId', '==', user.uid));
+  }, [db, user?.uid]);
+
+  const { data: myChannels = [], loading: channelsLoading } = useCollection(myChannelsQuery);
 
   useEffect(() => {
-    if (!channelLoading && !channel) {
+    if (!channelsLoading && myChannels.length === 0) {
       toast({ title: "Setup Required", description: "You need a channel profile to post broadcasts." });
       router.replace('/v-channels/setup');
+    } else if (myChannels.length > 0 && !targetChannelId) {
+      setTargetChannelId(myChannels[0].id);
     }
-  }, [channel, channelLoading, router, toast]);
+  }, [myChannels, channelsLoading, router, toast, targetChannelId]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,7 +61,10 @@ export default function CreateChannelPostPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !db || !channel || (!selectedFile && !caption.trim())) return;
+    if (!user || !db || !targetChannelId || (!selectedFile && !caption.trim())) return;
+
+    const channel = myChannels.find(c => c.id === targetChannelId);
+    if (!channel) return;
 
     setIsSubmitting(true);
     try {
@@ -79,9 +90,10 @@ export default function CreateChannelPostPage() {
       }
 
       await addDoc(collection(db, 'creatorPosts'), {
-        creatorId: user.uid,
+        creatorId: channel.id,
         creatorName: channel.name,
         creatorAvatar: channel.avatar,
+        privacy: channel.privacy || 'public', // Inherit channel privacy for global filtering
         type: mediaType,
         mediaUrl,
         caption: caption.trim(),
@@ -89,6 +101,7 @@ export default function CreateChannelPostPage() {
         likeCount: 0,
         commentsCount: 0,
         sharesCount: 0,
+        viewCount: 0,
         timestamp: serverTimestamp()
       });
 
@@ -101,7 +114,7 @@ export default function CreateChannelPostPage() {
     }
   };
 
-  if (channelLoading) {
+  if (channelsLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0E0C12]">
         <Loader2 className="animate-spin text-primary" size={32} />
@@ -109,7 +122,7 @@ export default function CreateChannelPostPage() {
     );
   }
 
-  if (!channel) return null;
+  if (myChannels.length === 0) return null;
 
   return (
     <div className="flex flex-col min-h-screen bg-[#0E0C12] animate-fade-in pb-10 text-white">
@@ -117,7 +130,7 @@ export default function CreateChannelPostPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-white mr-2">
           <ChevronLeft size={24} />
         </Button>
-        <h2 className="font-bold text-lg">Broadcast to Channels</h2>
+        <h2 className="font-bold text-lg">Create Broadcast</h2>
       </header>
 
       <form onSubmit={handleUpload} className="p-6 space-y-8">
@@ -132,12 +145,12 @@ export default function CreateChannelPostPage() {
                 </div>
                 <div className="text-center px-6">
                   <p className="font-bold text-sm">Tap to add Media</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-2">Optional: Channels supports text-only broadcasts too</p>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-2">Optional: Video, Image, or Text</p>
                 </div>
                 <input type="file" ref={fileInputRef} onChange={handleFileSelect} accept="video/*,image/*" className="hidden" />
              </div>
            ) : (
-             <div className="relative aspect-[9/16] w-full max-sm:w-full max-w-sm mx-auto rounded-[2.5rem] overflow-hidden bg-black/40 border border-white/10 shadow-2xl group">
+             <div className="relative aspect-[9/16] w-full max-w-sm mx-auto rounded-[2.5rem] overflow-hidden bg-black/40 border border-white/10 shadow-2xl group">
                 {selectedFile?.type.startsWith('video/') ? (
                   <video src={previewUrl} className="w-full h-full object-contain" controls />
                 ) : (
@@ -156,9 +169,28 @@ export default function CreateChannelPostPage() {
 
         <div className="space-y-6">
           <div className="space-y-2">
+             <label className="text-[10px] font-black uppercase tracking-widest ml-1 text-primary">Post To Channel</label>
+             <Select value={targetChannelId} onValueChange={setTargetChannelId}>
+                <SelectTrigger className="h-14 bg-white/5 border-white/5 rounded-2xl focus:ring-primary px-4">
+                   <SelectValue placeholder="Select channel" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-white/10">
+                   {myChannels.map(c => (
+                     <SelectItem key={c.id} value={c.id}>
+                        <div className="flex items-center gap-2">
+                           <PlayCircle size={14} className="text-primary" />
+                           <span className="font-bold">{c.name}</span>
+                        </div>
+                     </SelectItem>
+                   ))}
+                </SelectContent>
+             </Select>
+          </div>
+
+          <div className="space-y-2">
             <label className="text-[10px] font-black uppercase tracking-widest ml-1 text-primary">Broadcast Message</label>
             <Textarea 
-              placeholder="What are you broadcasting today?..." 
+              placeholder="What's on your mind?..." 
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               className="min-h-[120px] bg-white/5 border-white/5 rounded-2xl focus-visible:ring-primary p-4 text-sm resize-none"
@@ -170,7 +202,7 @@ export default function CreateChannelPostPage() {
             <div className="space-y-3">
               <Progress value={uploadProgress} className="h-2 bg-white/5" />
               <p className="text-center text-[10px] font-bold uppercase tracking-widest text-primary animate-pulse">
-                Broadcasting... {Math.round(uploadProgress)}%
+                Publishing... {Math.round(uploadProgress)}%
               </p>
             </div>
           ) : (

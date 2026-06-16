@@ -5,14 +5,15 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useFirestore, useStorage } from '@/firebase';
-import { doc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, updateDoc, collection, addDoc } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ChevronLeft, Camera, Loader2, PlayCircle, Sparkles } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ChevronLeft, Camera, Loader2, PlayCircle, Sparkles, Globe, Lock, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
 
@@ -26,7 +27,8 @@ export default function SetupChannelPage() {
   const [formData, setFormData] = useState({
     name: '',
     username: '',
-    bio: ''
+    bio: '',
+    privacy: 'public'
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -70,13 +72,15 @@ export default function SetupChannelPage() {
         setIsUploading(false);
       }
 
-      const channelRef = doc(db, 'creatorChannels', user.uid);
-      await setDoc(channelRef, {
+      // WeChat style: Can have multiple channels, so we use auto ID or specific handle ID
+      const channelsRef = collection(db, 'creatorChannels');
+      const docRef = await addDoc(channelsRef, {
         creatorId: user.uid,
         name: formData.name.trim(),
         username: formData.username.toLowerCase().trim(),
         bio: formData.bio.trim(),
         avatar: avatarUrl,
+        privacy: formData.privacy,
         followerCount: 0,
         followingCount: 0,
         totalLikes: 0,
@@ -85,13 +89,8 @@ export default function SetupChannelPage() {
         updatedAt: serverTimestamp()
       });
 
-      // Also ensure user doc has followingCount
-      await updateDoc(doc(db, 'users', user.uid), {
-        followingCount: 0
-      }).catch(() => {});
-
-      toast({ title: "Channel Created!", description: "Welcome to the Zynqo creator community." });
-      router.push(`/v-channels/${user.uid}`);
+      toast({ title: "Channel Created!", description: "Your unique broadcast space is ready." });
+      router.push(`/v-channels/${docRef.id}`);
     } catch (error: any) {
       toast({ title: "Failed to create channel", description: error.message, variant: "destructive" });
     } finally {
@@ -105,7 +104,7 @@ export default function SetupChannelPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="text-muted-foreground mr-2">
           <ChevronLeft size={24} />
         </Button>
-        <h2 className="font-bold text-lg">Setup Channel</h2>
+        <h2 className="font-bold text-lg">New Channel</h2>
       </header>
 
       <div className="p-6 space-y-8">
@@ -114,8 +113,8 @@ export default function SetupChannelPage() {
             <Sparkles size={32} />
           </div>
           <div className="space-y-1">
-            <h3 className="text-2xl font-headline font-bold">Start Your Broadcast</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed px-4">Create your unique creator persona and start sharing with the Zynqo community.</p>
+            <h3 className="text-2xl font-headline font-bold">Establish Your Presence</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed px-4">Create a specialized channel for your broadcasts.</p>
           </div>
         </div>
 
@@ -142,10 +141,9 @@ export default function SetupChannelPage() {
           {isUploading && (
             <div className="w-full max-w-[150px] space-y-1">
               <Progress value={uploadProgress} className="h-1" />
-              <p className="text-[8px] text-center text-muted-foreground uppercase font-bold tracking-widest">Uploading Avatar...</p>
             </div>
           )}
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Channel Branding</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Branding</p>
         </div>
 
         <form onSubmit={handleCreate} className="space-y-6">
@@ -154,14 +152,14 @@ export default function SetupChannelPage() {
             <Input 
               value={formData.name}
               onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))}
-              placeholder="e.g., Midnight Vibes"
+              placeholder="e.g., Midnight Moods"
               className="h-14 bg-white/5 border-white/5 rounded-2xl focus-visible:ring-primary"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[10px] font-bold uppercase tracking-widest ml-1 opacity-70">Handle (@username)</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-widest ml-1 opacity-70">Unique Handle</Label>
             <Input 
               value={formData.username}
               onChange={(e) => setFormData(p => ({ ...p, username: e.target.value }))}
@@ -172,12 +170,50 @@ export default function SetupChannelPage() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-[10px] font-bold uppercase tracking-widest ml-1 opacity-70">Channel Bio</Label>
+            <Label className="text-[10px] font-bold uppercase tracking-widest ml-1 opacity-70">Privacy Setting</Label>
+            <Select value={formData.privacy} onValueChange={(val) => setFormData(p => ({ ...p, privacy: val }))}>
+              <SelectTrigger className="h-14 bg-white/5 border-white/5 rounded-2xl focus:ring-primary px-4">
+                <SelectValue placeholder="Select privacy" />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-white/10">
+                <SelectItem value="public">
+                  <div className="flex items-center gap-3">
+                    <Globe size={16} className="text-primary" />
+                    <div className="flex flex-col">
+                      <span className="font-bold">Public</span>
+                      <span className="text-[8px] text-muted-foreground uppercase">Everyone can watch and discover</span>
+                    </div>
+                  </div>
+                </SelectItem>
+                <SelectItem value="private">
+                  <div className="flex items-center gap-3">
+                    <Lock size={16} className="text-yellow-500" />
+                    <div className="flex flex-col">
+                      <span className="font-bold">Private</span>
+                      <span className="text-[8px] text-muted-foreground uppercase">Only followers can watch content</span>
+                    </div>
+                  </div>
+                </SelectItem>
+                <SelectItem value="hidden">
+                  <div className="flex items-center gap-3">
+                    <EyeOff size={16} className="text-muted-foreground" />
+                    <div className="flex flex-col">
+                      <span className="font-bold">Hidden</span>
+                      <span className="text-[8px] text-muted-foreground uppercase">Not discoverable in search or feeds</span>
+                    </div>
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-[10px] font-bold uppercase tracking-widest ml-1 opacity-70">Bio (Optional)</Label>
             <Textarea 
               value={formData.bio}
               onChange={(e) => setFormData(p => ({ ...p, bio: e.target.value }))}
-              placeholder="What will you share with the world?" 
-              className="min-h-[120px] bg-white/5 border-white/5 rounded-2xl focus-visible:ring-primary p-4 resize-none"
+              placeholder="What will you broadcast?" 
+              className="min-h-[100px] bg-white/5 border-white/5 rounded-2xl focus-visible:ring-primary p-4 resize-none"
             />
           </div>
 
