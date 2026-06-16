@@ -1,4 +1,3 @@
-
 "use client";
 
 import { AppHeader } from '@/components/zynqo/AppHeader';
@@ -17,49 +16,18 @@ import {
   Edit3,
   Globe,
   QrCode,
-  Loader2
+  Loader2,
+  MapPin,
+  Calendar
 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger,
-  DialogFooter
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { doc, updateDoc } from 'firebase/firestore';
-import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 
 export default function ProfilePage() {
   const { user, profile, loading } = useZynqoAuth();
   const auth = useAuth();
-  const db = useFirestore();
   const router = useRouter();
-  const { toast } = useToast();
-  const [isEditing, setIsEditing] = useState(false);
-  const [editLoading, setEditLoading] = useState(false);
-  
-  const [editData, setEditData] = useState({
-    displayName: '',
-    bio: '',
-    profilePhoto: ''
-  });
-
-  useEffect(() => {
-    if (profile) {
-      setEditData({
-        displayName: profile.displayName || '',
-        bio: profile.bio || '',
-        profilePhoto: profile.profilePhoto || ''
-      });
-    }
-  }, [profile]);
 
   if (loading) {
     return (
@@ -83,126 +51,65 @@ export default function ProfilePage() {
     }
   };
 
-  const handleSaveProfile = async () => {
-    if (!db || !user) return;
-    setEditLoading(true);
-    try {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, {
-        displayName: editData.displayName,
-        bio: editData.bio,
-        profilePhoto: editData.profilePhoto
-      });
-      setIsEditing(false);
-      toast({
-        title: "Profile Updated",
-        description: "Your changes have been saved successfully.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: "Failed to update profile.",
-        variant: "destructive"
-      });
-    } finally {
-      setEditLoading(false);
-    }
+  const formatLastSeen = (timestamp: any) => {
+    if (!timestamp) return 'Never';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   return (
-    <div className="flex flex-col animate-fade-in bg-[#0E0C12]">
+    <div className="flex flex-col animate-fade-in bg-[#0E0C12] min-h-screen pb-24">
       <AppHeader title="Profile" showActions={false} showSearch={false} />
       
-      <div className="relative h-64 w-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-end justify-center pb-8 border-b border-white/10">
+      <div className="relative h-72 w-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-end justify-center pb-8 border-b border-white/10">
         <div className="absolute top-4 right-4 flex gap-2">
           <Button variant="ghost" size="icon" className="bg-black/20 backdrop-blur-md rounded-2xl text-white">
             <QrCode size={20} />
           </Button>
-          
-          <Dialog open={isEditing} onOpenChange={setIsEditing}>
-            <DialogTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="bg-black/20 backdrop-blur-md rounded-2xl text-white"
-              >
-                <Edit3 size={20} />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card border-white/10 text-foreground rounded-[2rem] max-w-[90vw] sm:max-w-[400px]">
-              <DialogHeader>
-                <DialogTitle className="font-headline text-xl font-bold">Edit Profile</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto no-scrollbar px-1">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-widest font-bold opacity-70">Profile Photo URL</Label>
-                  <div className="flex gap-2">
-                    <Input 
-                      value={editData.profilePhoto}
-                      onChange={(e) => setEditData(prev => ({ ...prev, profilePhoto: e.target.value }))}
-                      className="bg-white/5 border-white/5 h-12 rounded-xl text-xs"
-                      placeholder="https://example.com/photo.jpg"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-widest font-bold opacity-70">Display Name</Label>
-                  <Input 
-                    value={editData.displayName}
-                    onChange={(e) => setEditData(prev => ({ ...prev, displayName: e.target.value }))}
-                    className="bg-white/5 border-white/5 h-12 rounded-xl"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase tracking-widest font-bold opacity-70">Bio</Label>
-                  <Textarea 
-                    value={editData.bio}
-                    onChange={(e) => setEditData(prev => ({ ...prev, bio: e.target.value }))}
-                    className="bg-white/5 border-white/5 rounded-xl min-h-[100px]"
-                    placeholder="Tell your story..."
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button 
-                  onClick={handleSaveProfile} 
-                  disabled={editLoading}
-                  className="w-full bg-primary hover:bg-primary/90 rounded-xl h-12 font-bold shadow-lg shadow-primary/20"
-                >
-                  {editLoading ? <Loader2 className="animate-spin" /> : "Save Changes"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Link href="/profile/edit">
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="bg-black/20 backdrop-blur-md rounded-2xl text-white"
+            >
+              <Edit3 size={20} />
+            </Button>
+          </Link>
         </div>
         
         <div className="flex flex-col items-center gap-3">
           <div className="relative">
-            <Avatar className="w-28 h-28 border-4 border-background shadow-2xl">
+            <Avatar className="w-32 h-32 border-4 border-background shadow-2xl">
               <AvatarImage src={profile.profilePhoto} />
-              <AvatarFallback className="bg-primary/10 text-primary font-bold text-2xl">
+              <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">
                 {profile.displayName?.[0]}
               </AvatarFallback>
             </Avatar>
-            <div className="absolute bottom-1 right-1 w-6 h-6 bg-green-500 border-4 border-background rounded-full shadow-lg" />
+            <div className={`absolute bottom-2 right-2 w-7 h-7 border-4 border-background rounded-full shadow-lg ${profile.onlineStatus === 'online' ? 'bg-green-500' : 'bg-muted'}`} />
           </div>
           <div className="text-center px-6">
-            <h2 className="text-xl font-headline font-bold">{profile.displayName}</h2>
-            <p className="text-xs text-primary font-medium tracking-widest uppercase mt-0.5">@{profile.username}</p>
-            {profile.bio && (
-              <p className="text-xs text-muted-foreground mt-2 line-clamp-2 max-w-[250px] italic">
-                {profile.bio}
-              </p>
-            )}
+            <h2 className="text-2xl font-headline font-bold">{profile.displayName}</h2>
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <span className="text-xs text-primary font-bold tracking-widest uppercase">@{profile.username}</span>
+              {profile.country && (
+                <>
+                  <span className="text-muted-foreground/30">•</span>
+                  <div className="flex items-center gap-1 text-muted-foreground">
+                    <MapPin size={10} />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">{profile.country}</span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 p-6 -mt-6 z-10">
+      <div className="grid grid-cols-3 gap-2 p-6 -mt-8 z-10">
         {[
-          { label: 'Friends', value: '0' },
-          { label: 'Moments', value: '0' },
-          { label: 'Score', value: '0' }
+          { label: 'Followers', value: '0' },
+          { label: 'Following', value: '0' },
+          { label: 'Z-Score', value: '100' }
         ].map((stat, i) => (
           <div key={i} className="bg-card/80 backdrop-blur-xl p-4 rounded-3xl border border-white/5 flex flex-col items-center shadow-lg">
             <span className="text-lg font-headline font-bold text-foreground">{stat.value}</span>
@@ -211,9 +118,25 @@ export default function ProfilePage() {
         ))}
       </div>
 
-      <div className="px-6 pb-6 space-y-6">
-        <div className="space-y-2">
-          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Account</h4>
+      <div className="px-6 pb-6 space-y-8">
+        {profile.bio && (
+          <div className="bg-card/30 p-5 rounded-[2rem] border border-white/5 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-3 opacity-10">
+              <User size={40} />
+            </div>
+            <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-2">About Me</h4>
+            <p className="text-sm leading-relaxed text-muted-foreground italic">
+              "{profile.bio}"
+            </p>
+            <div className="flex items-center gap-2 mt-4 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
+              <Calendar size={12} />
+              <span>Joined {formatLastSeen(profile.createdAt)}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Account Settings</h4>
           <div className="bg-card/40 rounded-[2.5rem] border border-white/5 overflow-hidden">
             <ProfileMenuItem icon={User} label="Personal Information" />
             <ProfileMenuItem icon={Globe} label="Privacy & Visibility" />
@@ -221,8 +144,8 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">App Settings</h4>
+        <div className="space-y-3">
+          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Preferences</h4>
           <div className="bg-card/40 rounded-[2.5rem] border border-white/5 overflow-hidden">
             <ProfileMenuItem icon={Bell} label="Notifications" />
             <ProfileMenuItem icon={Database} label="Data & Storage" />
@@ -247,12 +170,12 @@ function ProfileMenuItem({ icon: Icon, label }: { icon: any, label: string }) {
   return (
     <button className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5 last:border-none">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-primary/80">
-          <Icon size={18} />
+        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-primary/80">
+          <Icon size={20} />
         </div>
         <span className="text-sm font-medium">{label}</span>
       </div>
-      <span className="text-muted-foreground text-lg">›</span>
+      <span className="text-muted-foreground text-lg opacity-30">›</span>
     </button>
   );
 }
