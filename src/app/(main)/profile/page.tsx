@@ -3,7 +3,7 @@
 
 import { AppHeader } from '@/components/zynqo/AppHeader';
 import { useAuth as useZynqoAuth } from '@/context/AuthContext';
-import { useAuth, useFirestore } from '@/firebase';
+import { useAuth, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { 
@@ -20,18 +20,30 @@ import {
   Loader2,
   MapPin,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  PlayCircle,
+  Plus
 } from 'lucide-react';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
+import { collection, query, where } from 'firebase/firestore';
 import Link from 'next/link';
 
 export default function ProfilePage() {
-  const { user, profile, loading } = useZynqoAuth();
+  const { user, profile, loading: authLoading } = useZynqoAuth();
   const auth = useAuth();
+  const db = useFirestore();
   const router = useRouter();
 
-  if (loading) {
+  // Fetch my channels
+  const myChannelsQuery = useMemoFirebase(() => {
+    if (!db || !user?.uid) return null;
+    return query(collection(db, 'creatorChannels'), where('creatorId', '==', user.uid));
+  }, [db, user?.uid]);
+
+  const { data: myChannels = [], loading: channelsLoading } = useCollection(myChannelsQuery);
+
+  if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-[#0E0C12]">
         <Loader2 className="animate-spin text-primary" size={32} />
@@ -53,120 +65,115 @@ export default function ProfilePage() {
     }
   };
 
-  const formatLastSeen = (timestamp: any) => {
-    if (!timestamp) return 'Never';
+  const formatJoinedDate = (timestamp: any) => {
+    if (!timestamp) return 'Recently';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    return date.toLocaleDateString([], { month: 'short', year: 'numeric' });
   };
 
   return (
     <div className="flex flex-col animate-fade-in bg-[#0E0C12] min-h-screen pb-24">
-      <AppHeader title="Profile" showActions={false} showSearch={false} />
+      <AppHeader title="Me" showActions={false} showSearch={false} />
       
-      <div className="relative h-72 w-full bg-gradient-to-br from-primary/30 to-secondary/30 flex items-end justify-center pb-8 border-b border-white/10">
-        <div className="absolute top-4 right-4 flex gap-2">
-          <Button variant="ghost" size="icon" className="bg-black/20 backdrop-blur-md rounded-2xl text-white">
-            <QrCode size={20} />
-          </Button>
-          <Link href="/profile/edit">
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              className="bg-black/20 backdrop-blur-md rounded-2xl text-white"
-            >
-              <Edit3 size={20} />
-            </Button>
+      {/* Personal Account Header */}
+      <div className="p-6 flex items-center gap-4 bg-card/20 border-b border-white/5">
+        <div className="relative">
+          <Avatar className="w-20 h-20 border-2 border-primary/20 shadow-xl">
+            <AvatarImage src={profile.profilePhoto} />
+            <AvatarFallback className="bg-primary/10 text-primary font-bold text-xl">
+              {profile.displayName?.[0]}
+            </AvatarFallback>
+          </Avatar>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl font-headline font-bold truncate">{profile.displayName}</h2>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest mt-0.5">@{profile.username}</p>
+          <Link href="/profile/edit" className="inline-flex items-center gap-1.5 mt-2 text-[10px] font-black uppercase tracking-widest text-primary hover:opacity-80 transition-opacity">
+            <Edit3 size={12} />
+            Edit Profile
           </Link>
         </div>
-        
-        <div className="flex flex-col items-center gap-3">
-          <div className="relative">
-            <Avatar className="w-32 h-32 border-4 border-background shadow-2xl">
-              <AvatarImage src={profile.profilePhoto} />
-              <AvatarFallback className="bg-primary/10 text-primary font-bold text-3xl">
-                {profile.displayName?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className={`absolute bottom-2 right-2 w-7 h-7 border-4 border-background rounded-full shadow-lg ${profile.onlineStatus === 'online' ? 'bg-green-500' : 'bg-muted'}`} />
-          </div>
-          <div className="text-center px-6">
-            <h2 className="text-2xl font-headline font-bold">{profile.displayName}</h2>
-            <div className="flex items-center justify-center gap-2 mt-1">
-              <span className="text-xs text-primary font-bold tracking-widest uppercase">@{profile.username}</span>
-              {profile.country && (
-                <>
-                  <span className="text-muted-foreground/30">•</span>
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <MapPin size={10} />
-                    <span className="text-[10px] font-bold uppercase tracking-wider">{profile.country}</span>
+        <Button variant="ghost" size="icon" className="text-muted-foreground rounded-2xl bg-white/5">
+          <QrCode size={20} />
+        </Button>
+      </div>
+
+      <div className="p-4 space-y-6">
+        {/* Creator Section (WeChat Style "Channels" link) */}
+        <section className="space-y-3">
+          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Content Creator</h4>
+          <div className="bg-card/40 rounded-[2rem] border border-white/5 overflow-hidden">
+            {channelsLoading ? (
+              <div className="p-6 flex justify-center"><Loader2 className="animate-spin text-primary/30" size={20} /></div>
+            ) : myChannels.length > 0 ? (
+              myChannels.map((channel: any) => (
+                <Link 
+                  key={channel.id} 
+                  href={`/v-channels/${channel.id}`}
+                  className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5 last:border-none"
+                >
+                  <div className="flex items-center gap-4">
+                    <Avatar className="w-10 h-10 rounded-xl border border-primary/20">
+                      <AvatarImage src={channel.avatar} />
+                      <AvatarFallback><PlayCircle size={20} /></AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-bold">{channel.name}</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Manage My Channel</span>
+                    </div>
                   </div>
-                </>
-              )}
-            </div>
+                  <ChevronRight size={16} className="text-muted-foreground/30" />
+                </Link>
+              ))
+            ) : (
+              <Link href="/v-channels/create" className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+                    <Plus size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">Create Video Channel</p>
+                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-0.5">Start sharing broadcasts</p>
+                  </div>
+                </div>
+                <ChevronRight size={16} className="text-muted-foreground/30" />
+              </Link>
+            )}
           </div>
-        </div>
-      </div>
+        </section>
 
-      <div className="grid grid-cols-3 gap-2 p-6 -mt-8 z-10">
-        {[
-          { label: 'Followers', value: '0' },
-          { label: 'Following', value: '0' },
-          { label: 'Z-Score', value: '100' }
-        ].map((stat, i) => (
-          <div key={i} className="bg-card/80 backdrop-blur-xl p-4 rounded-3xl border border-white/5 flex flex-col items-center shadow-lg">
-            <span className="text-lg font-headline font-bold text-foreground">{stat.value}</span>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{stat.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="px-6 pb-6 space-y-8">
-        {profile.bio && (
-          <div className="bg-card/30 p-5 rounded-[2rem] border border-white/5 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-3 opacity-10">
-              <User size={40} />
-            </div>
-            <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-2">About Me</h4>
-            <p className="text-sm leading-relaxed text-muted-foreground italic">
-              "{profile.bio}"
-            </p>
-            <div className="flex items-center gap-2 mt-4 text-[10px] text-muted-foreground font-bold uppercase tracking-widest">
-              <Calendar size={12} />
-              <span>Joined {formatLastSeen(profile.createdAt)}</span>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-2">
-            <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">General Settings</h4>
-            <Link href="/settings">
-              <span className="text-[10px] text-primary font-black uppercase tracking-widest">Manage All</span>
-            </Link>
-          </div>
+        {/* Account & Security */}
+        <section className="space-y-3">
+          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Personal Settings</h4>
           <div className="bg-card/40 rounded-[2.5rem] border border-white/5 overflow-hidden">
             <ProfileMenuItem icon={Settings} label="Application Settings" href="/settings" />
             <ProfileMenuItem icon={Globe} label="Privacy & Visibility" href="/settings/privacy" />
             <ProfileMenuItem icon={Bell} label="Notifications" href="/settings/notifications" />
+            <ProfileMenuItem icon={Lock} label="Security & Account" href="/settings/security" />
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-3">
-          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">App Support</h4>
+        <section className="space-y-3">
+          <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Support</h4>
           <div className="bg-card/40 rounded-[2.5rem] border border-white/5 overflow-hidden">
             <ProfileMenuItem icon={HelpCircle} label="Help & Support" href="#" />
             <ProfileMenuItem icon={Database} label="Data & Storage" href="/settings/data" />
           </div>
-        </div>
+        </section>
 
-        <Button 
-          variant="ghost" 
-          onClick={handleSignOut}
-          className="w-full h-14 rounded-3xl bg-destructive/10 text-destructive hover:bg-destructive hover:text-white transition-all flex items-center justify-center gap-2 font-bold mb-4 border border-destructive/20"
-        >
-          <LogOut size={20} />
-          Sign Out
-        </Button>
+        <div className="pt-4 px-2">
+          <Button 
+            variant="ghost" 
+            onClick={handleSignOut}
+            className="w-full h-14 rounded-[2rem] bg-destructive/5 text-destructive hover:bg-destructive hover:text-white transition-all flex items-center justify-center gap-2 font-bold border border-destructive/10 shadow-xl shadow-destructive/5"
+          >
+            <LogOut size={20} />
+            Sign Out
+          </Button>
+          <p className="text-center text-[9px] text-muted-foreground mt-6 font-bold uppercase tracking-[0.3em] opacity-40">
+            Zynqo Amethyst v1.2.0 • Joined {formatJoinedDate(profile.createdAt)}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -176,7 +183,7 @@ function ProfileMenuItem({ icon: Icon, label, href }: { icon: any, label: string
   return (
     <Link href={href} className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors border-b border-white/5 last:border-none">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-primary/80">
+        <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center text-primary/80">
           <Icon size={20} />
         </div>
         <span className="text-sm font-medium">{label}</span>

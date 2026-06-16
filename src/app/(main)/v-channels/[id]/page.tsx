@@ -7,8 +7,6 @@ import { useFirestore, useDoc, useCollection, useMemoFirebase } from '@/firebase
 import { 
   doc, 
   updateDoc, 
-  arrayUnion, 
-  arrayRemove, 
   query, 
   collection, 
   where, 
@@ -16,9 +14,7 @@ import {
   deleteDoc,
   setDoc,
   serverTimestamp,
-  increment,
-  getDocs,
-  limit
+  increment
 } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -30,9 +26,10 @@ import {
   Heart,
   Video as VideoIcon,
   Trash2,
-  Share2
+  Share2,
+  Edit3,
+  MoreVertical
 } from 'lucide-react';
-import { useState, useMemo, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -155,6 +152,9 @@ export default function CreatorChannelProfilePage() {
                   </AlertDialogContent>
                 </AlertDialog>
               )}
+              <Button variant="ghost" size="icon" className="text-white rounded-full">
+                <MoreVertical size={22} />
+              </Button>
             </div>
          </header>
 
@@ -190,7 +190,15 @@ export default function CreatorChannelProfilePage() {
             </div>
          </div>
 
-         {!isMe && (
+         {isMe ? (
+           <Button 
+             onClick={() => router.push(`/v-channels/edit/${channel.id}`)}
+             className="w-full h-12 rounded-2xl bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10"
+           >
+             <Edit3 size={18} className="mr-2" />
+             Edit Channel Info
+           </Button>
+         ) : (
            <Button 
              onClick={handleFollow}
              className={cn(
