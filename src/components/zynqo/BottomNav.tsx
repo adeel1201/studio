@@ -1,14 +1,15 @@
+
 "use client";
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { MessageSquare, CircleDot, Phone, LayoutGrid, Compass, User } from 'lucide-react';
+import { MessageSquare, CircleDot, Phone, LayoutGrid, Compass, User, Radio } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const NAV_ITEMS = [
   { icon: MessageSquare, label: 'Chats', path: '/chats' },
   { icon: CircleDot, label: 'Status', path: '/status' },
-  { icon: Phone, label: 'Calls', path: '/calls' },
+  { icon: Radio, label: 'Channels', path: '/channels' },
   { icon: LayoutGrid, label: 'Moments', path: '/moments' },
   { icon: Compass, label: 'Discover', path: '/discover' },
   { icon: User, label: 'Profile', path: '/profile' },
