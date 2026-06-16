@@ -2,7 +2,8 @@
 "use client";
 
 import { AppHeader } from '@/components/zynqo/AppHeader';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth as useZynqoAuth } from '@/context/AuthContext';
+import { useAuth, useFirestore } from '@/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { 
@@ -16,10 +17,8 @@ import {
   Edit3,
   Globe,
   QrCode,
-  Loader2,
-  Camera
+  Loader2
 } from 'lucide-react';
-import { auth, db } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -38,7 +37,9 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ProfilePage() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading } = useZynqoAuth();
+  const auth = useAuth();
+  const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
@@ -73,6 +74,7 @@ export default function ProfilePage() {
   }
 
   const handleSignOut = async () => {
+    if (!auth) return;
     try {
       await signOut(auth);
       router.push('/welcome');
@@ -82,6 +84,7 @@ export default function ProfilePage() {
   };
 
   const handleSaveProfile = async () => {
+    if (!db || !user) return;
     setEditLoading(true);
     try {
       const userRef = doc(db, 'users', user.uid);

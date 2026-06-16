@@ -6,16 +6,18 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ChevronLeft, User, Mail, Lock, Smartphone, Camera, UserCircle, Loader2 } from 'lucide-react';
+import { ChevronLeft, User, Mail, Lock, Camera, UserCircle, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { useAuth, useFirestore } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 
 export default function SignUpPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const auth = useAuth();
+  const db = useFirestore();
   const [isLoading, setIsLoading] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(null);
   
@@ -23,7 +25,6 @@ export default function SignUpPage() {
     username: '',
     displayName: '',
     email: '',
-    phone: '',
     password: '',
     confirmPassword: ''
   });
@@ -31,6 +32,15 @@ export default function SignUpPage() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const { email, password, confirmPassword, username, displayName } = formData;
+
+    if (!auth || !db) {
+      toast({
+        title: "Configuration Error",
+        description: "Firebase services are not yet available.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     if (password !== confirmPassword) {
       toast({
@@ -54,11 +64,19 @@ export default function SignUpPage() {
         email: email.toLowerCase(),
         profilePhoto: profilePic || `https://picsum.photos/seed/${user.uid}/200/200`,
         bio: '',
+        onlineStatus: 'online',
+        lastSeen: serverTimestamp(),
         createdAt: serverTimestamp()
+      });
+
+      toast({
+        title: "Welcome to Zynqo!",
+        description: "Account created successfully.",
       });
 
       router.push('/profile-setup');
     } catch (error: any) {
+      console.error("Signup error:", error);
       let message = "Failed to create account.";
       if (error.code === 'auth/email-already-in-use') message = "This email is already registered.";
       if (error.code === 'auth/weak-password') message = "Password should be at least 6 characters.";
