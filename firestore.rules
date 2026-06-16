@@ -17,7 +17,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated();
       allow update: if isOwner(userId);
-      allow delete: if false; // Profiles cannot be deleted for now
+      allow delete: if false;
+
+      // Contacts sub-collection
+      match /contacts/{contactId} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
     // Chats collection rules
@@ -34,7 +39,7 @@ service cloud.firestore {
       }
     }
     
-    // Fallback rule for safety (still restrictive)
+    // Fallback rule for safety (authenticated access only)
     match /{document=**} {
       allow read, write: if isAuthenticated();
     }

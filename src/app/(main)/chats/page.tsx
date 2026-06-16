@@ -1,11 +1,10 @@
-
 "use client";
 
 import { AppHeader } from '@/components/zynqo/AppHeader';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { MessageSquare, Search, X, UserPlus, Loader2, Sparkles, Users } from 'lucide-react';
+import { MessageSquare, Search, X, UserPlus, Loader2, Sparkles, Users, BookUser } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
@@ -33,7 +32,6 @@ export default function ChatsPage() {
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
 
   // Load real chats from Firestore where current user is a participant
-  // Removed server-side orderBy to avoid requiring a composite index
   const chatsQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(
@@ -63,7 +61,6 @@ export default function ChatsPage() {
 
   // Sort and filter conversations for the main list
   const filteredChats = useMemo(() => {
-    // Client-side sorting by updatedAt desc
     const sorted = [...chats].sort((a: any, b: any) => {
       const timeA = a.updatedAt?.toMillis?.() || 0;
       const timeB = b.updatedAt?.toMillis?.() || 0;
@@ -91,47 +88,6 @@ export default function ChatsPage() {
     });
   }, [allUsers, userSearchQuery, user?.uid]);
 
-  const startNewChat = async (targetUser: any) => {
-    if (!user || !db) return;
-
-    const existingChat = chats.find((c: any) => 
-      c.type !== 'group' && c.participantIds?.length === 2 && c.participantIds.includes(targetUser.uid)
-    );
-
-    if (existingChat) {
-      router.push(`/chats/${existingChat.id}`);
-      setIsNewChatOpen(false);
-      return;
-    }
-
-    const newChatData = {
-      participantIds: [user.uid, targetUser.uid],
-      participantNames: [user.displayName || 'User', targetUser.displayName || 'User'],
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-      lastMessage: {
-        text: 'Started a new conversation',
-        senderId: user.uid,
-        timestamp: serverTimestamp()
-      }
-    };
-
-    const chatsRef = collection(db, 'chats');
-    addDoc(chatsRef, newChatData)
-      .then((docRef) => {
-        router.push(`/chats/${docRef.id}`);
-        setIsNewChatOpen(false);
-      })
-      .catch(async (error) => {
-        const permissionError = new FirestorePermissionError({
-          path: chatsRef.path,
-          operation: 'create',
-          requestResourceData: newChatData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      });
-  };
-
   const formatTimestamp = (timestamp: any) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -146,12 +102,31 @@ export default function ChatsPage() {
 
   return (
     <div className="flex flex-col animate-fade-in pb-20 min-h-screen bg-[#0E0C12]">
-      <AppHeader 
-        title="Zynqo" 
-        showSearch={!isSearching}
-        showActions={!isSearching}
-        onSearchClick={() => setIsSearching(true)}
-      />
+      <header className="sticky top-0 z-40 w-full glass-morphism safe-top px-4 h-[72px] flex items-center justify-between">
+        <h1 className="text-2xl font-headline font-bold text-foreground bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+          Zynqo
+        </h1>
+        <div className="flex items-center gap-1">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => router.push('/contacts')}
+            className="text-primary hover:bg-primary/10 rounded-full"
+          >
+            <BookUser size={22} />
+          </Button>
+          {!isSearching && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={() => setIsSearching(true)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Search size={22} />
+            </Button>
+          )}
+        </div>
+      </header>
       
       {isSearching && (
         <div className="sticky top-0 z-50 bg-background/95 backdrop-blur-md px-4 py-3 flex items-center gap-2 border-b border-white/5 animate-in fade-in slide-in-from-top-4 duration-300">
@@ -332,9 +307,10 @@ export default function ChatsPage() {
               <div className="space-y-1">
                 {filteredUsers.length > 0 ? (
                   filteredUsers.map((u: any) => (
-                    <button 
+                    <Link 
                       key={u.uid}
-                      onClick={() => startNewChat(u)}
+                      href={`/users/${u.uid}`}
+                      onClick={() => setIsNewChatOpen(false)}
                       className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-white/5 transition-colors text-left px-4 group"
                     >
                       <div className="relative">
@@ -351,7 +327,7 @@ export default function ChatsPage() {
                       <div className="w-8 h-8 rounded-full bg-primary/0 group-hover:bg-primary/10 flex items-center justify-center text-primary transition-all">
                         <Sparkles size={14} className="opacity-0 group-hover:opacity-100" />
                       </div>
-                    </button>
+                    </Link>
                   ))
                 ) : (
                   <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
