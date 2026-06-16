@@ -18,8 +18,6 @@ import {
   Globe,
   QrCode,
   Loader2,
-  MapPin,
-  Calendar,
   ChevronRight,
   PlayCircle,
   Plus
@@ -99,7 +97,7 @@ export default function ProfilePage() {
       </div>
 
       <div className="p-4 space-y-6">
-        {/* Creator Section (WeChat Style "Channels" link) */}
+        {/* Creator Section */}
         <section className="space-y-3">
           <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Content Creator</h4>
           <div className="bg-card/40 rounded-[2rem] border border-white/5 overflow-hidden">
@@ -126,7 +124,7 @@ export default function ProfilePage() {
                 </Link>
               ))
             ) : (
-              <Link href="/v-channels/create" className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors group">
+              <Link href="/v-channels/setup" className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors group">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
                     <Plus size={20} />
