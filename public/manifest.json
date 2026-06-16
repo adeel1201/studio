@@ -1,12 +1,11 @@
 {
   "name": "Zynqo",
   "short_name": "Zynqo",
-  "description": "Premium modern messaging and social networking platform.",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#6A0DAD",
   "background_color": "#FFFFFF",
+  "theme_color": "#6A0DAD",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/icon-192.png",
