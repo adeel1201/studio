@@ -12,11 +12,16 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import { useState } from 'react';
+import { CommentsDialog } from '@/components/zynqo/CommentsDialog';
 
 export default function MomentsPage() {
   const db = useFirestore();
   const { user } = useAuth();
   const router = useRouter();
+
+  const [selectedMomentId, setSelectedMomentId] = useState<string | null>(null);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
 
   const momentsQuery = useMemoFirebase(() => {
     if (!db) return null;
@@ -41,6 +46,11 @@ export default function MomentsPage() {
       });
       errorEmitter.emit('permission-error', permissionError);
     });
+  };
+
+  const handleOpenComments = (momentId: string) => {
+    setSelectedMomentId(momentId);
+    setIsCommentsOpen(true);
   };
 
   return (
@@ -121,12 +131,15 @@ export default function MomentsPage() {
                     </span>
                   </button>
 
-                  <button className="flex items-center gap-2 group transition-colors">
+                  <button 
+                    onClick={() => handleOpenComments(moment.id)}
+                    className="flex items-center gap-2 group transition-colors"
+                  >
                     <div className="p-2 rounded-full bg-white/5 text-muted-foreground group-hover:bg-primary/5 group-hover:text-primary transition-all">
                       <MessageSquare size={20} />
                     </div>
                     <span className="text-xs font-bold text-muted-foreground group-hover:text-primary transition-colors">
-                      0
+                      View Comments
                     </span>
                   </button>
                 </div>
@@ -151,6 +164,14 @@ export default function MomentsPage() {
       >
         <Plus size={24} />
       </Button>
+
+      {selectedMomentId && (
+        <CommentsDialog 
+          momentId={selectedMomentId} 
+          isOpen={isCommentsOpen} 
+          onOpenChange={setIsCommentsOpen} 
+        />
+      )}
     </div>
   );
 }

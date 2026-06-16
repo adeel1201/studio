@@ -44,6 +44,35 @@
         "content",
         "createdAt"
       ]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a moment.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "userName": {
+          "type": "string"
+        },
+        "userPhoto": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "userId",
+        "userName",
+        "text",
+        "createdAt"
+      ]
     }
   },
   "auth": {
@@ -55,6 +84,10 @@
     "/moments/{momentId}": {
       "schema": "Moment",
       "description": "Collection of social moments shared by users."
+    },
+    "/moments/{momentId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a specific moment."
     }
   }
 }
