@@ -1,7 +1,7 @@
 {
   "name": "Zynqo",
   "short_name": "Zynqo",
-  "description": "Premium social networking and messaging platform.",
+  "description": "Premium modern messaging and social networking platform.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",

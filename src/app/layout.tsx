@@ -45,6 +45,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/icon-192.png" type="image/png" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
+        <meta name="theme-color" content="#6A0DAD" />
       </head>
       <body className="font-body antialiased bg-background text-foreground selection:bg-primary/30 min-h-screen">
         <FirebaseClientProvider>
@@ -61,7 +62,7 @@ export default function RootLayout({
               window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js').then(function(registration) {
                   console.log('Zynqo PWA: ServiceWorker registration successful');
-                }, function(err) {
+                }).catch(function(err) {
                   console.log('Zynqo PWA: ServiceWorker registration failed: ', err);
                 });
               });
