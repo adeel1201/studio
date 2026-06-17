@@ -60,7 +60,7 @@ export default function RootLayout({
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                  console.log('Zynqo PWA: ServiceWorker registration successful with scope: ', registration.scope);
+                  console.log('Zynqo PWA: ServiceWorker registration successful');
                 }, function(err) {
                   console.log('Zynqo PWA: ServiceWorker registration failed: ', err);
                 });
