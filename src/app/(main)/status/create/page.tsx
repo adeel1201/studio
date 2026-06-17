@@ -43,9 +43,13 @@ export default function CreateStatusPage() {
 
   const handleUploadStatus = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !db || !selectedFile || !storage) return;
+    if (!user || !db || !selectedFile || !storage) {
+      if (!storage) console.error("Storage not available during status upload.");
+      return;
+    }
 
     setIsLoading(true);
+    setUploadProgress(0);
     const fileName = `${Date.now()}_${selectedFile.name}`;
     const storageRef = ref(storage, `statuses/${user.uid}/${fileName}`);
     const uploadTask = uploadBytesResumable(storageRef, selectedFile);
@@ -54,13 +58,16 @@ export default function CreateStatusPage() {
       'state_changed',
       (snapshot) => {
         const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+        console.log(`Status upload progress: ${progress.toFixed(2)}%`);
         setUploadProgress(progress);
       },
       (error) => {
+        console.error("Status storage upload task error:", error);
         setIsLoading(false);
-        toast({ title: "Upload failed", variant: "destructive" });
+        toast({ title: "Upload failed", description: error.message, variant: "destructive" });
       },
       async () => {
+        console.log("Status upload completed.");
         const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
         const mediaType = selectedFile.type.startsWith('video/') ? 'video' : 'image';
 
@@ -78,7 +85,8 @@ export default function CreateStatusPage() {
 
           toast({ title: "Status shared!", description: "Your update has been posted successfully." });
           router.push('/status');
-        } catch (err) {
+        } catch (err: any) {
+          console.error("Error creating status document:", err);
           toast({ title: "Failed to post status", variant: "destructive" });
         } finally {
           setIsLoading(false);

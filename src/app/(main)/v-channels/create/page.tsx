@@ -29,7 +29,6 @@ export default function CreateChannelPostPage() {
   const [targetChannelId, setTargetChannelId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch all my channels to choose where to post
   const myChannelsQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(collection(db, 'creatorChannels'), where('creatorId', '==', user.uid));
@@ -62,15 +61,24 @@ export default function CreateChannelPostPage() {
     e.preventDefault();
     if (!user || !db || !targetChannelId || (!selectedFile && !caption.trim())) return;
 
+    if (!storage) {
+      console.error("Firebase Storage not initialized. Check your environment variables.");
+      toast({ title: "Configuration Error", description: "Storage service is unavailable.", variant: "destructive" });
+      return;
+    }
+
     const channel = myChannels.find(c => c.id === targetChannelId);
     if (!channel) return;
 
     setIsSubmitting(true);
+    setUploadProgress(0);
+    
     try {
       let mediaUrl = '';
       let mediaType = 'text';
 
-      if (selectedFile && storage) {
+      if (selectedFile) {
+        console.log("Starting upload for file:", selectedFile.name, "Size:", selectedFile.size);
         const fileExt = selectedFile.name.split('.').pop();
         const fileName = `v-channels/${user.uid}/${Date.now()}.${fileExt}`;
         const storageRef = ref(storage, fileName);
@@ -78,9 +86,19 @@ export default function CreateChannelPostPage() {
 
         await new Promise((resolve, reject) => {
           uploadTask.on('state_changed', 
-            (snapshot) => setUploadProgress((snapshot.bytesTransferred / snapshot.totalBytes) * 100),
-            reject,
-            resolve
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              console.log(`Upload progress: ${progress.toFixed(2)}%`);
+              setUploadProgress(progress);
+            },
+            (error) => {
+              console.error("Storage upload task error:", error);
+              reject(error);
+            },
+            () => {
+              console.log("Upload completed successfully.");
+              resolve(true);
+            }
           );
         });
 
@@ -92,7 +110,7 @@ export default function CreateChannelPostPage() {
         creatorId: channel.id,
         creatorName: channel.name,
         creatorAvatar: channel.avatar,
-        privacy: channel.privacy || 'public', // Inherit channel privacy for global filtering
+        privacy: channel.privacy || 'public',
         type: mediaType,
         mediaUrl,
         caption: caption.trim(),
@@ -107,7 +125,8 @@ export default function CreateChannelPostPage() {
       toast({ title: "Broadcast Shared!", description: "Your update is now live on Channels." });
       router.push('/v-channels');
     } catch (err: any) {
-      toast({ title: "Broadcast Failed", description: err.message, variant: "destructive" });
+      console.error("Full error object during broadcast creation:", err);
+      toast({ title: "Broadcast Failed", description: err.message || "An unknown error occurred during upload.", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
     }
