@@ -1,16 +1,17 @@
-// Zynqo Service Worker
-const CACHE_NAME = 'zynqo-static-v1';
+const CACHE_NAME = 'zynqo-v1';
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
+  console.log('Zynqo Service Worker: Installed');
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
+  console.log('Zynqo Service Worker: Activated');
 });
 
 self.addEventListener('fetch', (event) => {
-  // Required fetch handler for PWA installability.
-  // In this basic version, we just proxy the request to the network.
-  event.respondWith(fetch(event.request));
+  // Required for PWA installability.
+  // This is a "Network First" approach for a social app.
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
+  );
 });
