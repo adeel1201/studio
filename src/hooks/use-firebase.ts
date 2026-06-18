@@ -2,48 +2,57 @@
 
 /**
  * @fileOverview Zynqo Real-time Firebase Hooks
- * Provides a unified, real-time interface for all Firebase operations.
- * This file handles real-time syncing for messages, channels, and moments.
+ * Provides a unified, stable, and real-time interface for all Firebase operations.
  */
 
 import { 
-  useFirestore as useFirebaseFirestore, 
-  useStorage as useFirebaseStorage, 
-  useAuth as useFirebaseAuth,
-  useCollection as useFirebaseCollection,
-  useDoc as useFirebaseDoc,
+  useFirestore as useBaseFirestore, 
+  useStorage as useBaseStorage, 
+  useAuth as useBaseAuth,
+  useCollection as useBaseCollection,
+  useDoc as useBaseDoc,
   useMemoFirebase
 } from '@/firebase';
 import { DocumentData, Query, DocumentReference } from 'firebase/firestore';
 
+/**
+ * Returns the Firestore instance.
+ */
 export function useFirestore() {
-  const db = useFirebaseFirestore();
-  if (!db) console.warn("Firestore not initialized yet.");
-  return db;
+  return useBaseFirestore();
 }
 
+/**
+ * Returns the Storage instance.
+ */
 export function useStorage() {
-  const storage = useFirebaseStorage();
-  if (!storage) console.warn("Firebase Storage not initialized yet.");
-  return storage;
+  return useBaseStorage();
 }
 
+/**
+ * Returns the Auth instance.
+ */
 export function useAuth() {
-  return useFirebaseAuth();
+  return useBaseAuth();
 }
 
 /**
  * Real-time collection hook using onSnapshot.
+ * Automatically handles subscriptions and cleanups.
  */
 export function useCollection<T = DocumentData>(q: Query<T> | null) {
-  return useFirebaseCollection<T>(q);
+  return useBaseCollection<T>(q);
 }
 
 /**
  * Real-time document hook using onSnapshot.
+ * Automatically handles subscriptions and cleanups.
  */
 export function useDoc<T = DocumentData>(ref: DocumentReference<T> | null) {
-  return useFirebaseDoc<T>(ref);
+  return useBaseDoc<T>(ref);
 }
 
+/**
+ * Stabilizes a Firebase query or reference to prevent infinite render loops.
+ */
 export { useMemoFirebase };

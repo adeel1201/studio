@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/context/AuthContext';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase } from '@/hooks/use-firebase';
 import { collection, query, where, orderBy } from 'firebase/firestore';
 import { 
   Dialog, 
@@ -29,6 +29,7 @@ export default function ChatsPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
 
+  // Real-time chats subscription
   const chatsQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(
@@ -39,6 +40,7 @@ export default function ChatsPage() {
 
   const { data: chats = [], loading: chatsLoading } = useCollection(chatsQuery);
 
+  // Real-time users for status mapping
   const usersQuery = useMemoFirebase(() => {
     if (!db || !user?.uid) return null;
     return query(collection(db, 'users'));

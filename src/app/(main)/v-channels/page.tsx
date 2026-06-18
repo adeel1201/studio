@@ -22,8 +22,6 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { VCommentsDialog } from '@/components/zynqo/VCommentsDialog';
 import { useToast } from '@/hooks/use-toast';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 const PAGE_SIZE = 5;
 
@@ -48,21 +46,18 @@ export default function VChannelsPage() {
 
   const postsQuery = useMemoFirebase(() => {
     if (!db) return null;
-
     if (feedType === 'following') {
       if (followingIds.length === 0) return null;
       return query(
         collection(db, 'creatorPosts'),
-        where('creatorId', 'in', followingIds.slice(0, 30)),
+        where('creatorId', 'in', followingIds.slice(0, 10)),
         orderBy('timestamp', 'desc'),
         limit(limitCount)
       );
     }
-
     return query(
       collection(db, 'creatorPosts'),
       where('privacy', '==', 'public'),
-      orderBy('likeCount', 'desc'),
       orderBy('timestamp', 'desc'),
       limit(limitCount)
     );
@@ -180,14 +175,15 @@ const VideoPostCard = ({ post, isLast, onLastRef }: { post: any, isLast: boolean
     const newLiked = !isLiked;
     setIsLiked(newLiked);
     
-    updateDoc(postRef, {
-      likes: newLiked ? arrayUnion(user.uid) : arrayRemove(user.uid),
-      likeCount: increment(newLiked ? 1 : -1)
-    });
-
-    updateDoc(creatorChannelRef, {
-      totalLikes: increment(newLiked ? 1 : -1)
-    }).catch(() => {});
+    try {
+      await updateDoc(postRef, {
+        likes: newLiked ? arrayUnion(user.uid) : arrayRemove(user.uid),
+        likeCount: increment(newLiked ? 1 : -1)
+      });
+      await updateDoc(creatorChannelRef, {
+        totalLikes: increment(newLiked ? 1 : -1)
+      });
+    } catch (e) { console.error(e); }
   };
 
   const handleVideoClick = () => {
@@ -195,19 +191,6 @@ const VideoPostCard = ({ post, isLast, onLastRef }: { post: any, isLast: boolean
     if (isPlaying) videoRef.current.pause();
     else videoRef.current.play();
     setIsPlaying(!isPlaying);
-  };
-
-  const handleDelete = async () => {
-    if (!db || !user || user.uid !== post.creatorId) return;
-    try {
-      await deleteDoc(doc(db, 'creatorPosts', post.id));
-      toast({ title: "Post removed" });
-    } catch (err: any) {
-      errorEmitter.emit('permission-error', new FirestorePermissionError({
-        path: `creatorPosts/${post.id}`,
-        operation: 'delete'
-      }));
-    }
   };
 
   const isMe = user?.uid === post.creatorId;
@@ -272,14 +255,6 @@ const VideoPostCard = ({ post, isLast, onLastRef }: { post: any, isLast: boolean
            </div>
            <span className="text-[10px] font-bold text-foreground drop-shadow-md">{post.sharesCount || 0}</span>
         </button>
-
-        {isMe && (
-          <button onClick={handleDelete} className="flex flex-col items-center gap-1 mt-2 opacity-30 hover:opacity-100 transition-opacity">
-            <div className="p-2 text-foreground">
-               <Trash2 size={24} />
-            </div>
-          </button>
-        )}
       </div>
 
       <div className="absolute bottom-16 left-0 right-16 p-4 z-10 bg-gradient-to-t from-white/95 via-white/60 to-transparent">

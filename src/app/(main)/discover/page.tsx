@@ -27,7 +27,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase } from '@/hooks/use-firebase';
 import { collection, query, where, limit, orderBy, doc, updateDoc, arrayUnion, arrayRemove, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -35,7 +35,7 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { CommentsDialog } from '@/components/zynqo/CommentsDialog';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError, type SecurityRuleContext } from '@/firebase/errors';
+import { FirestorePermissionError } from '@/firebase/errors';
 import { useToast } from '@/hooks/use-toast';
 
 // Distance calculation
@@ -106,7 +106,7 @@ export default function DiscoverPage() {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
           path: momentRef.path,
           operation: 'delete',
-        } satisfies SecurityRuleContext));
+        }));
       });
   };
 
@@ -240,7 +240,7 @@ export default function DiscoverPage() {
                 {moment.content && <div className="px-5 pb-4"><p className="text-sm leading-relaxed text-foreground/90">{moment.content}</p></div>}
                 {moment.imageUrl && (
                   <div className="relative aspect-[4/3] w-full bg-muted/20">
-                    <Image src={moment.imageUrl} alt="Moment" fill className="object-cover" />
+                    <Image src={moment.imageUrl} alt="Moment" fill className="object-cover" unoptimized />
                   </div>
                 )}
                 {moment.videoUrl && (
@@ -287,7 +287,7 @@ export default function DiscoverPage() {
                 <div className="relative">
                   <div className="absolute inset-0 bg-primary/10 animate-ping rounded-full" />
                   <div className="relative w-16 h-16 rounded-3xl bg-primary/10 flex items-center justify-center text-primary">
-                    <Navigation size={32} className="animate-spin-slow" />
+                    <Navigation size={32} />
                   </div>
                 </div>
                 <div className="space-y-1">

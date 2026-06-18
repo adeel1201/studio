@@ -7,20 +7,12 @@ import {
   ChevronLeft, 
   Send, 
   Plus, 
-  Mic, 
-  Sparkles, 
-  MoreVertical, 
   Phone, 
   Video, 
-  Loader2, 
-  FileIcon, 
-  Download,
-  PlayCircle,
-  Trash2
+  Loader2
 } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import Image from 'next/image';
-import { aiConversationAssistant } from '@/ai/flows/ai-conversation-assistant-flow';
 import { useAuth } from '@/context/AuthContext';
 import { 
   useFirestore, 
@@ -42,29 +34,24 @@ import {
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function ChatDetailPage() {
   const params = useParams();
   const id = params?.id as string;
   const router = useRouter();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const db = useFirestore();
   const storage = useStorage();
   const { toast } = useToast();
   
   const [inputText, setInputText] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-
+  // Memoize refs and queries to prevent infinite loops
   const chatRef = useMemoFirebase(() => (id && user && db) ? doc(db, 'chats', id) : null, [db, id, user?.uid]);
   const { data: chat, loading: chatLoading } = useDoc(chatRef);
 
@@ -84,8 +71,8 @@ export default function ChatDetailPage() {
   const partnerRef = useMemoFirebase(() => (partnerId && user && db) ? doc(db, 'users', partnerId) : null, [db, partnerId, user?.uid]);
   const { data: partnerProfile } = useDoc(partnerRef);
 
-  const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-    messagesEndRef.current?.scrollIntoView({ behavior });
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -94,7 +81,7 @@ export default function ChatDetailPage() {
     }
   }, [messages.length]);
 
-  const handleSend = (mediaData?: { url: string; type: string; name?: string; duration?: number }) => {
+  const handleSend = async (mediaData?: { url: string; type: string; name?: string }) => {
     if ((!inputText.trim() && !mediaData) || !user || !id || !db) return;
     
     const textToSend = inputText.trim();
@@ -109,26 +96,30 @@ export default function ChatDetailPage() {
       messageData.mediaUrl = mediaData.url;
       messageData.mediaType = mediaData.type;
       if (mediaData.name) messageData.fileName = mediaData.name;
-      if (mediaData.duration) messageData.duration = mediaData.duration;
     }
 
     const messagesRef = collection(db, 'chats', id, 'messages');
-    const currentChatRef = doc(db, 'chats', id);
     
-    addDoc(messagesRef, messageData).catch(console.error);
-
-    updateDoc(currentChatRef, {
-      lastMessage: {
-        text: mediaData ? `Shared a ${mediaData.type}` : textToSend,
-        senderId: user.uid,
-        timestamp: serverTimestamp(),
-        status: 'sent'
-      },
-      updatedAt: serverTimestamp()
-    }).catch(console.error);
-    
-    setInputText('');
-    setAiSuggestions([]);
+    addDoc(messagesRef, messageData)
+      .then(() => {
+        updateDoc(doc(db, 'chats', id), {
+          lastMessage: {
+            text: mediaData ? `Shared a ${mediaData.type}` : textToSend,
+            senderId: user.uid,
+            timestamp: serverTimestamp(),
+            status: 'sent'
+          },
+          updatedAt: serverTimestamp()
+        });
+        setInputText('');
+      })
+      .catch(async (err) => {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({
+          path: messagesRef.path,
+          operation: 'create',
+          requestResourceData: messageData
+        }));
+      });
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -146,7 +137,7 @@ export default function ChatDetailPage() {
         let type = 'document';
         if (file.type.startsWith('image/')) type = 'image';
         else if (file.type.startsWith('video/')) type = 'video';
-        handleSend({ url, type, name: file.name });
+        await handleSend({ url, type, name: file.name });
         setIsUploading(false);
       }
     );
@@ -175,7 +166,7 @@ export default function ChatDetailPage() {
             </Avatar>
             <div>
               <h3 className="font-bold text-sm text-foreground">{partnerName}</h3>
-              <span className="text-[9px] uppercase font-bold tracking-widest text-primary mt-1 block">
+              <span className={cn("text-[9px] uppercase font-bold tracking-widest mt-1 block", partnerProfile?.onlineStatus === 'online' ? "text-green-500" : "text-muted-foreground")}>
                 {partnerProfile?.onlineStatus === 'online' ? 'Active Now' : 'Offline'}
               </span>
             </div>
@@ -199,7 +190,11 @@ export default function ChatDetailPage() {
                 {msg.text && <p className="text-sm">{msg.text}</p>}
                 {msg.mediaUrl && (
                   <div className="mt-2 rounded-xl overflow-hidden">
-                    {msg.mediaType === 'image' ? <Image src={msg.mediaUrl} alt="Shared" width={200} height={200} className="w-full h-auto" /> : <video src={msg.mediaUrl} controls className="w-full" />}
+                    {msg.mediaType === 'image' ? (
+                      <Image src={msg.mediaUrl} alt="Shared" width={200} height={200} className="w-full h-auto" unoptimized />
+                    ) : (
+                      <video src={msg.mediaUrl} controls className="w-full" />
+                    )}
                   </div>
                 )}
               </div>
@@ -221,7 +216,7 @@ export default function ChatDetailPage() {
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
             className="flex-1 bg-transparent border-none outline-none text-sm px-2 text-foreground"
           />
-          <Button onClick={() => handleSend()} disabled={!inputText.trim()} size="icon" className="rounded-full bg-primary h-10 w-10 text-white">
+          <Button onClick={() => handleSend()} disabled={!inputText.trim() || isUploading} size="icon" className="rounded-full bg-primary h-10 w-10 text-white">
             <Send size={18} />
           </Button>
         </div>
