@@ -33,7 +33,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function UserProfilePage() {
   const params = useParams();
   const id = params?.id as string;
-  const { user } = useAuth();
+  const { user, profile: myProfile } = useAuth();
   const db = useFirestore();
   const router = useRouter();
   const { toast } = useToast();
@@ -52,7 +52,9 @@ export default function UserProfilePage() {
   }, [contactData]);
 
   const toggleContact = async () => {
-    if (!user?.uid || !db || !id || !targetProfile) return;
+    if (!user?.uid || !db || !id || !targetProfile) {
+      return;
+    }
     
     setIsActionLoading(true);
     try {
@@ -63,8 +65,8 @@ export default function UserProfilePage() {
       } else {
         await setDoc(ref, {
           addedAt: serverTimestamp(),
-          displayName: targetProfile.displayName,
-          username: targetProfile.username
+          displayName: targetProfile.displayName || 'User',
+          username: targetProfile.username || 'unknown'
         });
         toast({ title: "Added to contacts" });
       }
@@ -76,7 +78,10 @@ export default function UserProfilePage() {
   };
 
   const startChat = async () => {
-    if (!user?.uid || !db || !id || !targetProfile) return;
+    if (!user?.uid || !db || !id || !targetProfile) {
+      toast({ title: "Error", description: "Session or profile not found", variant: "destructive" });
+      return;
+    }
     
     setIsActionLoading(true);
     try {
@@ -88,8 +93,8 @@ export default function UserProfilePage() {
       );
       
       const querySnapshot = await getDocs(q);
-      const existingChat = querySnapshot.docs.find(d => {
-        const data = d.data();
+      const existingChat = querySnapshot.docs.find(docSnap => {
+        const data = docSnap.data();
         return data.participantIds && data.participantIds.includes(id);
       });
 
@@ -99,7 +104,7 @@ export default function UserProfilePage() {
         const newChat = await addDoc(chatsRef, {
           type: 'one-to-one',
           participantIds: [user.uid, id],
-          participantNames: [user.displayName || 'User', targetProfile.displayName || 'User'],
+          participantNames: [user.displayName || myProfile?.displayName || 'User', targetProfile.displayName || 'User'],
           updatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
           lastMessage: {
