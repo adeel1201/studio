@@ -56,12 +56,12 @@ export default function UserProfilePage() {
     
     setIsActionLoading(true);
     try {
-      const ref = doc(db!, 'users', user.uid, 'contacts', id);
+      const contactDocRef = doc(db, 'users', user.uid, 'contacts', id);
       if (isContact) {
-        await deleteDoc(ref);
+        await deleteDoc(contactDocRef);
         toast({ title: "Removed from contacts" });
       } else {
-        await setDoc(ref, {
+        await setDoc(contactDocRef, {
           addedAt: serverTimestamp(),
           displayName: (targetProfile as any).displayName || 'User',
           username: (targetProfile as any).username || 'unknown'
@@ -83,7 +83,7 @@ export default function UserProfilePage() {
     
     setIsActionLoading(true);
     try {
-      const chatsRef = collection(db!, 'chats');
+      const chatsRef = collection(db, 'chats');
       const q = query(
         chatsRef,
         where('type', '==', 'one-to-one'),

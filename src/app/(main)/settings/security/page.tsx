@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth as useZynqoAuth } from '@/context/AuthContext';
-import { useAuth, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useAuth as useFirebaseAuth, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { sendEmailVerification } from 'firebase/auth';
-import { collection, query, orderBy, limit, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { 
   ChevronLeft, 
@@ -13,12 +13,10 @@ import {
   Mail, 
   Smartphone, 
   History, 
-  DeviceMobile, 
-  AlertCircle,
   Loader2,
   CheckCircle2,
   XCircle,
-  ExternalLink
+  AlertCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { formatDistanceToNow } from 'date-fns';
@@ -27,7 +25,7 @@ import { cn } from '@/lib/utils';
 export default function SecuritySettingsPage() {
   const router = useRouter();
   const { user, profile } = useZynqoAuth();
-  const auth = useAuth();
+  const auth = useFirebaseAuth();
   const db = useFirestore();
   const { toast } = useToast();
 
@@ -70,7 +68,6 @@ export default function SecuritySettingsPage() {
       </header>
 
       <div className="p-4 space-y-8">
-        {/* Security Health Card */}
         <div className="bg-primary/5 border border-primary/20 p-6 rounded-[2.5rem] flex flex-col items-center text-center gap-4 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5">
              <ShieldCheck size={120} />
@@ -87,7 +84,6 @@ export default function SecuritySettingsPage() {
           </div>
         </div>
 
-        {/* Protection Sections */}
         <section className="space-y-3">
           <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground ml-2">Protection Flow</h4>
           <div className="bg-card rounded-[2.5rem] border border-border divide-y divide-border overflow-hidden shadow-sm">
@@ -140,7 +136,6 @@ export default function SecuritySettingsPage() {
           </div>
         </section>
 
-        {/* Login History */}
         <section className="space-y-4">
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-2">
@@ -188,7 +183,6 @@ export default function SecuritySettingsPage() {
           </div>
         </section>
 
-        {/* Account Recovery */}
         <div className="bg-muted/30 p-6 rounded-[2.5rem] border border-dashed border-border flex items-start gap-4">
            <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-muted-foreground shrink-0 shadow-sm">
               <AlertCircle size={24} />
