@@ -52,11 +52,11 @@ export default function UserProfilePage() {
   }, [contactData]);
 
   const toggleContact = async () => {
-    if (!user?.uid || !db || !id || !targetProfile) return;
+    if (!user || !user.uid || !db || !id || !targetProfile) return;
     
     setIsActionLoading(true);
     try {
-      const contactDocRef = doc(db, 'users', user.uid, 'contacts', id);
+      const contactDocRef = doc(db!, 'users', user.uid, 'contacts', id);
       if (isContact) {
         await deleteDoc(contactDocRef);
         toast({ title: "Removed from contacts" });
@@ -76,14 +76,14 @@ export default function UserProfilePage() {
   };
 
   const startChat = async () => {
-    if (!user?.uid || !db || !id || !targetProfile) {
+    if (!user || !user.uid || !db || !id || !targetProfile) {
       toast({ title: "Error", description: "Session or profile not found", variant: "destructive" });
       return;
     }
     
     setIsActionLoading(true);
     try {
-      const chatsRef = collection(db, 'chats');
+      const chatsRef = collection(db!, 'chats');
       const q = query(
         chatsRef,
         where('type', '==', 'one-to-one'),

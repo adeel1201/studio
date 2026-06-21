@@ -8,7 +8,7 @@
 import { 
   useFirestore as useBaseFirestore, 
   useStorage as useBaseStorage, 
-  useAuth as useBaseAuth,
+  useFirebaseAuth as useBaseAuth,
   useCollection as useBaseCollection,
   useDoc as useBaseDoc,
   useMemoFirebase
@@ -32,7 +32,7 @@ export function useStorage() {
 /**
  * Returns the Auth instance.
  */
-export function useAuth() {
+export function useFirebaseAuth() {
   return useBaseAuth();
 }
 
