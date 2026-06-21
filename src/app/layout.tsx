@@ -3,7 +3,9 @@ import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
 import { FirebaseClientProvider } from '@/firebase';
+import { RootErrorBoundary } from '@/components/RootErrorBoundary';
 import Script from 'next/script';
+import React from 'react';
 
 export const viewport: Viewport = {
   themeColor: '#6A0DAD',
@@ -46,14 +48,16 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="font-body antialiased bg-background text-foreground selection:bg-primary/30 min-h-screen">
-        <FirebaseClientProvider>
-          <AuthProvider>
-            <div className="flex flex-col min-h-screen max-w-md mx-auto relative bg-background shadow-2xl overflow-hidden">
-              {children}
-            </div>
-            <Toaster />
-          </AuthProvider>
-        </FirebaseClientProvider>
+        <RootErrorBoundary>
+          <FirebaseClientProvider>
+            <AuthProvider>
+              <div className="flex flex-col min-h-screen max-w-md mx-auto relative bg-background shadow-2xl overflow-hidden">
+                {children}
+              </div>
+              <Toaster />
+            </AuthProvider>
+          </FirebaseClientProvider>
+        </RootErrorBoundary>
         <Script id="register-pwa-sw" strategy="afterInteractive">
           {`
             if ('serviceWorker' in navigator) {

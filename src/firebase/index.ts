@@ -15,6 +15,7 @@ export function initializeFirebase(): {
   const hasConfig = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "undefined" && firebaseConfig.apiKey !== "";
   
   if (!hasConfig) {
+    console.error("Firebase initialization failed: Missing API Key in config.");
     return { app: null, auth: null, db: null, storage: null };
   }
 
@@ -27,6 +28,7 @@ export function initializeFirebase(): {
     const db = getFirestore(app);
     const storage = getStorage(app);
     
+    console.log("Firebase services initialized successfully.");
     return { app, auth, db, storage };
   } catch (error) {
     console.error("Failed to initialize Firebase:", error);
