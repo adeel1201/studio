@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  distDir: 'dist',
+  // Removed output: 'export' to support standard dynamic routing and preview stability
   images: {
     unoptimized: true,
   },

@@ -1,3 +1,8 @@
+/**
+ * @fileOverview Firebase Client Configuration
+ * Reads from NEXT_PUBLIC environment variables.
+ */
+
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
@@ -7,11 +12,10 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
 };
 
-// Diagnostic logging for development
-if (typeof window !== 'undefined') {
-  console.log("Zynqo Firebase Config Diagnostic:", {
+// Diagnostic logging for development (Sanitized)
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log("Zynqo Firebase Config Check:", {
     hasApiKey: !!firebaseConfig.apiKey,
     projectId: firebaseConfig.projectId || "MISSING",
-    env: process.env.NODE_ENV
   });
 }

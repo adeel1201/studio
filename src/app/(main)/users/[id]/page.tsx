@@ -52,7 +52,8 @@ export default function UserProfilePage() {
   }, [contactData]);
 
   const toggleContact = async () => {
-    if (!user || !user.uid || !db || !id || !targetProfile) return;
+    // TypeScript Error Fix: Explicit null checks
+    if (!user?.uid || !db || !id || !targetProfile) return;
     
     setIsActionLoading(true);
     try {
@@ -76,7 +77,8 @@ export default function UserProfilePage() {
   };
 
   const startChat = async () => {
-    if (!user || !user.uid || !db || !id || !targetProfile) {
+    // TypeScript Error Fix: Explicit null checks
+    if (!user?.uid || !db || !id || !targetProfile) {
       toast({ title: "Error", description: "Session or profile not found", variant: "destructive" });
       return;
     }

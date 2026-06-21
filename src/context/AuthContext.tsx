@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { useAuth, useFirestore } from '@/firebase';
+import { useAuth as useFirebaseAuth, useFirestore } from '@/firebase';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useRouter, usePathname } from 'next/navigation';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -24,69 +24,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Use direct firebase instance hooks
-  const firebaseAuth = useAuth();
+  const auth = useFirebaseAuth();
   const db = useFirestore();
-  
   const router = useRouter();
   const pathname = usePathname();
 
-  // Handle Online Status
   useEffect(() => {
     if (!user || !db) return;
 
     const userRef = doc(db, 'users', user.uid);
-    
     updateDoc(userRef, {
       onlineStatus: 'online',
       lastSeen: serverTimestamp()
     }).catch(() => {});
 
-    const handleVisibilityChange = () => {
+    const handleVisibility = () => {
       const status = document.visibilityState === 'visible' ? 'online' : 'away';
-      updateDoc(userRef, { 
-        onlineStatus: status,
-        lastSeen: serverTimestamp()
-      }).catch(() => {});
+      updateDoc(userRef, { onlineStatus: status, lastSeen: serverTimestamp() }).catch(() => {});
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [user, db]);
 
-  // Subscribe to Auth and Profile
   useEffect(() => {
     let unsubscribeProfile: (() => void) | undefined;
 
-    if (!firebaseAuth || !db) {
-      console.warn("AuthProvider: Firebase instances missing.");
+    if (!auth || !db) {
       setLoading(false);
       return;
     }
 
-    const unsubscribeAuth = onAuthStateChanged(firebaseAuth, (authUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (authUser) => {
       setUser(authUser);
-      
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-        unsubscribeProfile = undefined;
-      }
+      if (unsubscribeProfile) unsubscribeProfile();
 
-      if (authUser && db) {
+      if (authUser) {
         const docRef = doc(db, "users", authUser.uid);
         unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
-          if (docSnap.exists()) {
-            setProfile(docSnap.data());
-          } else {
-            setProfile(null);
-          }
+          setProfile(docSnap.exists() ? docSnap.data() : null);
           setLoading(false);
-        }, (err) => {
-          console.error("Profile snapshot error:", err);
-          setLoading(false);
-        });
+        }, () => setLoading(false));
       } else {
         setProfile(null);
         setLoading(false);
@@ -97,29 +75,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       unsubscribeAuth();
       if (unsubscribeProfile) unsubscribeProfile();
     };
-  }, [firebaseAuth, db]);
+  }, [auth, db]);
 
   // Handle Protected Routes
   useEffect(() => {
-    if (!loading && firebaseAuth) {
+    if (!loading && auth) {
       const publicPaths = ['/welcome', '/login', '/signup', '/forgot-password'];
-      const isPublicPath = publicPaths.some(path => pathname?.startsWith(path));
+      const isPublic = publicPaths.some(path => pathname?.startsWith(path));
 
-      if (!user && !isPublicPath) {
+      if (!user && !isPublic) {
         router.push('/welcome');
-      } else if (user && isPublicPath) {
+      } else if (user && isPublic) {
         router.push('/chats');
       }
     }
-  }, [user, loading, pathname, router, firebaseAuth]);
+  }, [user, loading, pathname, router, auth]);
 
-  if (!firebaseAuth || !db) {
+  if (!auth || !db) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background p-6 text-center">
         <AlertCircle className="w-12 h-12 text-destructive mb-4" />
-        <h2 className="text-xl font-bold mb-2">Firebase Connection Required</h2>
+        <h2 className="text-xl font-bold mb-2 text-foreground">Firebase Error</h2>
         <p className="text-sm text-muted-foreground max-w-xs">
-          The app couldn't connect to Firebase. Please verify your environment variables.
+          Initialization failed. Please ensure all environment variables are correctly set.
         </p>
       </div>
     );
@@ -129,7 +107,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground animate-pulse">Initializing Zynqo...</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Connecting to Zynqo...</p>
       </div>
     );
   }
@@ -141,4 +119,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export const useAuthContext = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext);

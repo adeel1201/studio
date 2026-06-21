@@ -6,16 +6,19 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { firebaseConfig } from './config';
 
+/**
+ * Initializes Firebase services if not already initialized.
+ */
 export function initializeFirebase(): {
   app: FirebaseApp | null;
   auth: Auth | null;
   db: Firestore | null;
   storage: FirebaseStorage | null;
 } {
-  const hasConfig = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "undefined" && firebaseConfig.apiKey !== "";
+  // Safety check for required config
+  const isConfigValid = !!firebaseConfig.apiKey && firebaseConfig.apiKey !== "undefined";
   
-  if (!hasConfig) {
-    console.error("Firebase initialization failed: Missing API Key in config.");
+  if (!isConfigValid) {
     return { app: null, auth: null, db: null, storage: null };
   }
 
@@ -28,10 +31,9 @@ export function initializeFirebase(): {
     const db = getFirestore(app);
     const storage = getStorage(app);
     
-    console.log("Firebase services initialized successfully.");
     return { app, auth, db, storage };
   } catch (error) {
-    console.error("Failed to initialize Firebase:", error);
+    console.error("Firebase Initialization Error:", error);
     return { app: null, auth: null, db: null, storage: null };
   }
 }

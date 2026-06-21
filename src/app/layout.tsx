@@ -1,4 +1,4 @@
-import type {Metadata, Viewport} from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
@@ -17,18 +17,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Zynqo | Connect, Chat, Share, Discover',
-  description: 'Premium modern messaging and social networking platform.',
+  title: 'Zynqo | Messaging & Social',
+  description: 'Premium social networking platform.',
   manifest: '/manifest.json',
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: 'default',
-    title: 'Zynqo',
-  },
-  icons: {
-    icon: '/icon-192.png',
-    apple: '/icon-192.png',
-  },
 };
 
 export default function RootLayout({
@@ -42,10 +33,6 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#6A0DAD" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className="font-body antialiased bg-background text-foreground selection:bg-primary/30 min-h-screen">
         <RootErrorBoundary>
@@ -62,11 +49,7 @@ export default function RootLayout({
           {`
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(registration) {
-                  console.log('Zynqo PWA Ready');
-                }).catch(function(err) {
-                  console.log('PWA Registration failed:', err);
-                });
+                navigator.serviceWorker.register('/sw.js').catch(console.error);
               });
             }
           `}
