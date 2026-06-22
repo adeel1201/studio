@@ -14,7 +14,7 @@ export const firebaseConfig = {
 
 // Diagnostic logging for development (Sanitized)
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-  console.log("Zynqo Firebase Config Check:", {
+  console.log("Zynqo Firebase Config Diagnostic:", {
     hasApiKey: !!firebaseConfig.apiKey,
     projectId: firebaseConfig.projectId || "MISSING",
   });

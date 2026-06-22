@@ -18,7 +18,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: 'Zynqo | Messaging & Social',
-  description: 'Premium social networking platform.',
+  description: 'Premium modern messaging and social networking platform.',
   manifest: '/manifest.json',
 };
 
@@ -49,7 +49,11 @@ export default function RootLayout({
           {`
             if ('serviceWorker' in navigator) {
               window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').catch(console.error);
+                navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                  console.log('PWA Service Worker registered');
+                }).catch(function(err) {
+                  console.log('PWA Service Worker failed:', err);
+                });
               });
             }
           `}

@@ -1,19 +1,23 @@
-git add .
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   images: {
-      remotePatterns: [
-            {
-                    protocol: 'https',
-                            hostname: '**.googleapis.com',
-                                  },
-                                        {
-                                                protocol: 'https',
-                                                        hostname: '**.firebasestorage.app',
-                                                              },
-                                                                  ],
-                                                                    },
-                                                                    };
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.googleapis.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.firebasestorage.app',
+      },
+      {
+        protocol: 'https',
+        hostname: 'picsum.photos',
+      }
+    ],
+    unoptimized: true,
+  },
+};
 
-                                                                    export default nextConfig;
+export default nextConfig;
